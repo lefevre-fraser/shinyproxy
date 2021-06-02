@@ -54,7 +54,6 @@ import eu.openanalytics.containerproxy.spec.IProxySpecProvider;
  * Also, if no port is specified, a port mapping is automatically created for Shiny port 3838.
  */
 @Component
-@Primary
 @ConfigurationProperties(prefix = "proxy")
 public class ShinyProxySpecProvider implements IProxySpecProvider {
 
