@@ -44,7 +44,7 @@ public class AppController extends BaseController {
 	@Inject
 	private ProxyMappingManager mappingManager;
 	
-	@RequestMapping(value="/app/*", method=RequestMethod.GET)
+	@RequestMapping(value="/app/{appname}/**", method=RequestMethod.GET)
 	public String app(ModelMap map, HttpServletRequest request) {
 		prepareMap(map, request);
 		
@@ -57,7 +57,7 @@ public class AppController extends BaseController {
 		return "app";
 	}
 	
-	@RequestMapping(value="/app/*", method=RequestMethod.POST)
+	@RequestMapping(value="/app/{appname}/**", method=RequestMethod.POST)
 	@ResponseBody
 	public Map<String,String> startApp(HttpServletRequest request) {
 		Proxy proxy = getOrStart(request);
@@ -69,7 +69,7 @@ public class AppController extends BaseController {
 		return response;
 	}
 	
-	@RequestMapping(value="/app_direct/**")
+	@RequestMapping(value="/app_direct/{appname}/**")
 	public void appDirect(HttpServletRequest request, HttpServletResponse response) {
 		Proxy proxy = getOrStart(request);
 		awaitReady(proxy);
