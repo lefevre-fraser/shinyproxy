@@ -3,17 +3,17 @@
 	xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd">
 	<modelVersion>4.0.0</modelVersion>
 
-	<groupId>eu.openanalytics</groupId>
-	<artifactId>shinyproxy</artifactId>
-	<version>2.5.0</version>
+	<groupId>com.metamorphsoftware</groupId>
+	<artifactId>shinyproxy-visualizer</artifactId>
+	<version>1.0.0</version>
 	<packaging>jar</packaging>
 
-	<name>ShinyProxy</name>
+	<name>ShinyProxy-Visualizer</name>
 	<description>deploy Shiny apps in an enterprise context</description>
 
 	<organization>
-		<name>Open Analytics NV</name>
-		<url>https://www.shinyproxy.io/</url>
+		<name>MetaMorph</name>
+		<url>https://www.metamorphsoftware.com/</url>
 	</organization>
 
 	<parent>
@@ -47,18 +47,26 @@
 		<repository>
 			<id>oa-nexus-snapshots</id>
 			<name>OpenAnalytics Snapshots Repository</name>
-<!-- 			<url>http://nexus.openanalytics.eu/nexus/content/repositories/snapshots</url> -->
+			<!-- <url>http://nexus.openanalytics.eu/nexus/content/repositories/snapshots</url> -->
 			<url>https://nexus.openanalytics.eu/repository/snapshots</url>
-			<snapshots><enabled>true</enabled></snapshots>
-			<releases><enabled>false</enabled></releases>
+			<snapshots>
+				<enabled>true</enabled>
+			</snapshots>
+			<releases>
+				<enabled>false</enabled>
+			</releases>
 		</repository>
 		<repository>
 			<id>oa-nexus-releases</id>
 			<name>OpenAnalytics Snapshots Repository</name>
-<!-- 			<url>http://nexus.openanalytics.eu/nexus/content/repositories/releases</url> -->
+			<!-- <url>http://nexus.openanalytics.eu/nexus/content/repositories/releases</url> -->
 			<url>https://nexus.openanalytics.eu/repository/releases</url>
-			<snapshots><enabled>false</enabled></snapshots>
-			<releases><enabled>true</enabled></releases>
+			<snapshots>
+				<enabled>false</enabled>
+			</snapshots>
+			<releases>
+				<enabled>true</enabled>
+			</releases>
 		</repository>
 	</repositories>
 
@@ -72,7 +80,8 @@
 			<groupId>com.fasterxml.jackson.datatype</groupId>
 			<artifactId>jackson-datatype-jsr353</artifactId>
 			<version>2.11.2</version>
-			<!-- We need a higher version than shipped by Spring to have all functionality (namely JsonPatch support) -->
+			<!-- We need a higher version than shipped by Spring to have all functionality 
+				(namely JsonPatch support) -->
 		</dependency>
 		<dependency>
 			<groupId>org.springframework.boot</groupId>
@@ -83,6 +92,10 @@
 			<artifactId>js-cookie</artifactId>
 			<version>2.2.1</version>
 		</dependency>
+		<dependency>
+			<groupId>org.apache.commons</groupId>
+			<artifactId>commons-dbcp2</artifactId>
+		</dependency>
 	</dependencies>
 
 	<build>
@@ -92,7 +105,7 @@
 				<artifactId>spring-boot-maven-plugin</artifactId>
 				<executions>
 					<execution>
-                                                <id>repackage</id>
+						<id>repackage</id>
 						<goals>
 							<goal>repackage</goal>
 						</goals>
@@ -118,18 +131,11 @@
 				<groupId>org.codehaus.mojo</groupId>
 				<artifactId>rpm-maven-plugin</artifactId>
 				<version>2.1.5</version>
-				<!--
-				<executions>
-		        	<execution>
-				        <id>generate-rpm</id>
-				        <goals>
-					       <goal>attached-rpm</goal>
-				        </goals>
-			        </execution>
-		        </executions>
-				-->
+				<!-- <executions> <execution> <id>generate-rpm</id> <goals> <goal>attached-rpm</goal> 
+					</goals> </execution> </executions> -->
 				<configuration>
-					<license>(c) Copyright Open Analytics NV, 2016-2020 - Apache License 2.0</license>
+					<license>(c) Copyright Open Analytics NV, 2016-2020 - Apache
+						License 2.0</license>
 					<release>1.el7</release>
 					<group>Development/Tools</group>
 					<packager>Open Analytics</packager>
@@ -209,16 +215,8 @@
 				<artifactId>jdeb</artifactId>
 				<groupId>org.vafer</groupId>
 				<version>1.5</version>
-				<!--
-				<executions>
-					<execution>
-						<phase>package</phase>
-						<goals>
-							<goal>jdeb</goal>
-						</goals>
-					</execution>
-				</executions>
-				-->
+				<!-- <executions> <execution> <phase>package</phase> <goals> <goal>jdeb</goal> 
+					</goals> </execution> </executions> -->
 				<configuration>
 					<verbose>true</verbose>
 					<controlDir>${basedir}/src/deb/control</controlDir>
@@ -293,6 +291,7 @@
 					<aggregate>true</aggregate>
 					<strictCheck>true</strictCheck>
 					<excludes>
+						<!-- ShinyProxy Original Exclude list -->
 						<exclude>*.log</exclude>
 						<exclude>mvnw.cmd</exclude>
 						<exclude>mvnw</exclude>
@@ -308,18 +307,30 @@
 						<exclude>src/deb/**</exclude>
 						<exclude>templates/**</exclude>
 						<exclude>src/main/resources/static/js/js.cookie-2.2.1.min.js</exclude>
+						
+						<!-- Exclude Files From Original ShinyProxy as they have their own appropriate license headers  -->
+						<exclude>Jenkinsfile</exclude>
+						<exclude>kubernetesPod.yaml</exclude>
+						<exclude>SHINYPROXY_LICENSE</exclude>
+						<exclude>SHINYPROXY_LICENSE_HEADER</exclude>
+						<exclude>.github/workflows/workflows.yaml</exclude>
+						<exclude>src/main/resources/fragments/navbar.html</exclude>
+						<exclued>src/main/resources/templates/admin.html</exclued>
+						<exclued>src/main/resources/templates/app.html</exclued>
+						<exclued>src/main/resources/templates/index.html</exclued>
+						<exclude>src/main/resources/static/css/default.css</exclude>
+						<exclude>src/main/resources/static/js/new_version_check.js</exclude>
+						<exclude>src/main/java/eu/openanalytics/shinyproxy/*.java</exclude>
+						<exclude>src/main/java/eu/openanalytics/shinyproxy/controllers/BaseController.java</exclude>
+						<exclude>src/main/java/eu/openanalytics/shinyproxy/controllers/AppController.java</exclude>
+						<exclude>src/main/java/eu/openanalytics/shinyproxy/controllers/AdminController.java</exclude>
+						<exclude>src/main/java/eu/openanalytics/shinyproxy/controllers/IndexController.java</exclude>
+						<exclude>src/main/java/eu/openanalytics/shinyproxy/controllers/IssueController.java</exclude>
 					</excludes>
 				</configuration>
 				<executions>
-					<!--
-					<execution>
-						<id>generate-copyright-headers</id>
-						<phase>process-sources</phase>
-						<goals>
-							<goal>format</goal>
-						</goals>
-					</execution>
-					-->
+					<!-- <execution> <id>generate-copyright-headers</id> <phase>process-sources</phase> 
+						<goals> <goal>format</goal> </goals> </execution> -->
 					<execution>
 						<id>check-copyright-headers</id>
 						<phase>package</phase>
@@ -341,62 +352,62 @@
 					</execution>
 				</executions>
 				<configuration>
-                                    <fileSets>
-                                        <fileSet>
-                                            <directory>${project.build.directory}</directory>
-                                            <includes>
-                                                <include>*.jar</include>
-                                                <include>*.pom</include>
-                                            </includes>
-                                            <excludes>
-                                                <exclude>*.sha256</exclude>
-                                                <exclude>*.md5</exclude>
-                                            </excludes>
-                                        </fileSet>
-                                    </fileSets>
-                                    <algorithms>
-                                       <algorithm>SHA-256</algorithm>
-                                       <algorithm>MD5</algorithm>
-                                   </algorithms>
-                                   <attachChecksums>true</attachChecksums>
-                                   <csvSummary>false</csvSummary>
-                                </configuration>
+					<fileSets>
+						<fileSet>
+							<directory>${project.build.directory}</directory>
+							<includes>
+								<include>*.jar</include>
+								<include>*.pom</include>
+							</includes>
+							<excludes>
+								<exclude>*.sha256</exclude>
+								<exclude>*.md5</exclude>
+							</excludes>
+						</fileSet>
+					</fileSets>
+					<algorithms>
+						<algorithm>SHA-256</algorithm>
+						<algorithm>MD5</algorithm>
+					</algorithms>
+					<attachChecksums>true</attachChecksums>
+					<csvSummary>false</csvSummary>
+				</configuration>
 			</plugin>
 			<plugin>
-    			<artifactId>maven-deploy-plugin</artifactId>
-    			<version>3.0.0-M1</version>
-    			<configuration>
-        			<updateReleaseInfo>true</updateReleaseInfo>
-    			</configuration>
+				<artifactId>maven-deploy-plugin</artifactId>
+				<version>3.0.0-M1</version>
+				<configuration>
+					<updateReleaseInfo>true</updateReleaseInfo>
+				</configuration>
 			</plugin>
 		</plugins>
 	</build>
 
-        <profiles>
-          <profile>
-            <id>owasp-dependency-check</id>
-            <build>
-              <plugins>
-                <plugin>
-                  <groupId>org.owasp</groupId>
-                  <artifactId>dependency-check-maven</artifactId>
-                  <version>5.3.0</version>
-                  <configuration>
-                    <suppressionFiles>
-                        <suppressionFile>owasp-suppression.xml</suppressionFile>
-                    </suppressionFiles>
-                    </configuration>
-                  <executions>
-                    <execution>
-                      <goals>
-                        <goal>check</goal>
-                      </goals>
-                    </execution>
-                  </executions>
-                </plugin>
-              </plugins>
-            </build>
-          </profile>
-        </profiles>
+	<profiles>
+		<profile>
+			<id>owasp-dependency-check</id>
+			<build>
+				<plugins>
+					<plugin>
+						<groupId>org.owasp</groupId>
+						<artifactId>dependency-check-maven</artifactId>
+						<version>5.3.0</version>
+						<configuration>
+							<suppressionFiles>
+								<suppressionFile>owasp-suppression.xml</suppressionFile>
+							</suppressionFiles>
+						</configuration>
+						<executions>
+							<execution>
+								<goals>
+									<goal>check</goal>
+								</goals>
+							</execution>
+						</executions>
+					</plugin>
+				</plugins>
+			</build>
+		</profile>
+	</profiles>
 
 </project>
