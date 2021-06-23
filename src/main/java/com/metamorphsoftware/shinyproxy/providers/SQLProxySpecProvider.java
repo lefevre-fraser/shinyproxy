@@ -1,30 +1,28 @@
 /**
  * ShinyProxy-Visualizer
  * 
- * Copyright (C) 2021 MetaMorph
+ * Copyright 2021 MetaMorph
  * 
- * ===========================================================================
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
  * 
- * This program is free software: you can redistribute it and/or modify
- * it under the terms of the Apache License as published by
- * The Apache Software Foundation, either version 2 of the License, or
- * (at your option) any later version.
- * 
- * This program is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
- * Apache License for more details.
- * 
- * You should have received a copy of the Apache License
- * along with this program.  If not, see <http://www.apache.org/licenses/>
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *       
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
  */
-package com.metamorphsoftware.shinyproxy;
+package com.metamorphsoftware.shinyproxy.providers;
 
-import java.io.File;
+import java.nio.file.Path;
 import java.util.AbstractMap;
 import java.util.Arrays;
 import java.util.List;
 import java.util.Map;
+import java.util.function.Function;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
 
@@ -33,8 +31,9 @@ import javax.inject.Inject;
 import org.springframework.context.annotation.Primary;
 import org.springframework.stereotype.Component;
 
-import com.metamorphsoftware.shinyproxy.services.SQLService;
+import com.metamorphsoftware.shinyproxy.services.FileHandlingService;
 import com.metamorphsoftware.shinyproxy.services.SQLService.UserFileAccess;
+import com.metamorphsoftware.shinyproxy.services.SQLUserService;
 
 import eu.openanalytics.containerproxy.model.spec.ContainerSpec;
 import eu.openanalytics.containerproxy.model.spec.ProxySpec;
@@ -50,33 +49,59 @@ import eu.openanalytics.containerproxy.spec.IProxySpecProvider;
 public class SQLProxySpecProvider implements IProxySpecProvider {
 	
 	@Inject
-	protected SQLService sqlService;
+	protected SQLUserService sqlUserService;
 	
 	@Inject
 	protected UserService userService;
+	
+	@Inject
+	protected FileHandlingService fileHandlingService;
 
 	@Override
 	public List<ProxySpec> getSpecs() {
-		return sqlService.getUserFileAccess(sqlService.getUser(userService.getCurrentUserId()).getId(), false)
-				.stream().map(SQLProxySpecProvider::createProxySpec)
+		return List.of(sqlUserService.getUserFileAccess(false))
+				.stream().map(new Function<UserFileAccess, ProxySpec>() {
+					@Override
+					public ProxySpec apply(UserFileAccess ufa) {
+						return createProxySpec(ufa);
+					}
+				})
 				.collect(Collectors.toList());
 	}
 	
-	private static ProxySpec createProxySpec(UserFileAccess ufa) {
+	/**
+	 * @param userFileAccess
+	 * @return
+	 */
+	private ProxySpec createProxySpec(UserFileAccess userFileAccess) {
 		ProxySpec pSpec = new ProxySpec();
-		pSpec.setId(ufa.getSharedUserId() + "_" + ufa.getFileId());
-		pSpec.setDisplayName(ufa.getFilename());
+		pSpec.setId(userFileAccess.getFileId());
+		pSpec.setDisplayName(userFileAccess.getFile().getTitle());
+		pSpec.setDescription(userFileAccess.getFile().getDescription());
 		
 		{
 			ContainerSpec cSpec = new ContainerSpec();
 			cSpec.setImage("visualizer");
-			String datapath = System.getProperty("user.dir") + File.separator + "userdata" + File.separator 
-					+ ufa.getSharedUserId() + File.separator + ufa.getFileId();
-			cSpec.setVolumes(new String[] { String.format("%s:/home/visualizer/data", datapath) });
+			Path dataPath = fileHandlingService.findJSONLaunch(userFileAccess.getFileId(), userFileAccess.getUserId());
+			if (dataPath == null) {
+				dataPath = fileHandlingService.findCSVLaunch(userFileAccess.getFileId(), userFileAccess.getUserId());
+			}
+			
+			cSpec.setVolumes(new String[] { String.format("%s:/home/visualizer/data", 
+					(fileHandlingService.getConfig().getUserDockerVolume() == null ?
+							dataPath.getParent().toAbsolutePath().toString() :
+								fileHandlingService.getConfig().getUserDockerVolume())) });
+			
+			String filename = dataPath.getFileName().toString();
+			String launchFile = "/home/visualizer/data/" + 
+					(fileHandlingService.getConfig().getUserDockerVolume() == null ?
+							"" : (userFileAccess.getUserId() + "/" + userFileAccess.getFileId() + "/")) + filename;
+			String envVar = (filename.endsWith(".csv") ? "DIG_INPUT_CSV" : "DIG_DATASET_CONFIG"); 
 			cSpec.setEnv(Stream.of(
-					new AbstractMap.SimpleEntry<String, String>("DIG_INPUT_CSV", "/home/visualizer/data/output.csv"))
+					new AbstractMap.SimpleEntry<String, String>(envVar, launchFile))
 						.collect(Collectors.toMap(Map.Entry::getKey, Map.Entry::getValue)));
-			cSpec.setCmd(new String[] {"R", "-e", "shiny::runApp('Dig',display.mode='normal', quiet=TRUE, launch.browser=FALSE, host='0.0.0.0', port=80)"});
+			
+//			cSpec.setCmd(new String[] {"R", "-e", "shiny::runApp('Dig',display.mode='normal', quiet=TRUE, launch.browser=FALSE, host='0.0.0.0', port=80)"});
 			cSpec.setPortMapping(Stream.of(
 					new AbstractMap.SimpleEntry<String, Integer>("default", 80))
 						.collect(Collectors.toMap(Map.Entry::getKey, Map.Entry::getValue)));

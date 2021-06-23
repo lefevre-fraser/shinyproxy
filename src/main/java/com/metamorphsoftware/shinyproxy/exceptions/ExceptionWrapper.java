@@ -15,14 +15,21 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package eu.openanalytics.shinyproxy.controllers;
+package com.metamorphsoftware.shinyproxy.exceptions;
 
-import org.springframework.boot.context.properties.ConfigurationPropertiesScan;
-import org.springframework.context.annotation.ComponentScan;
-import org.springframework.stereotype.Controller;
+public class ExceptionWrapper extends RuntimeException {
 
-@ComponentScan("com.metamorphsoftware")
-@Controller
-public class ComponentScanController {
+	/**
+	 * 
+	 */
+	private static final long serialVersionUID = -3707862948463702229L;
+
+	/**
+	 * @param cause
+	 */
+	public ExceptionWrapper(Throwable cause) {
+		super(cause);
+		// TODO Auto-generated constructor stub
+	}
 
 }

@@ -1,0 +1,78 @@
+<!--
+
+    ShinyProxy-Visualizer
+    
+    Copyright 2021 MetaMorph
+    
+    Licensed under the Apache License, Version 2.0 (the "License");
+    you may not use this file except in compliance with the License.
+    You may obtain a copy of the License at
+    
+        http://www.apache.org/licenses/LICENSE-2.0
+          
+    Unless required by applicable law or agreed to in writing, software
+    distributed under the License is distributed on an "AS IS" BASIS,
+    WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+    See the License for the specific language governing permissions and
+    limitations under the License.
+
+-->
+<!DOCTYPE html>
+<html xmlns:th="http://www.thymeleaf.org"
+	xmlns:sec="http://www.thymeleaf.org/thymeleaf-extras-springsecurity4">
+<head lang="en">
+<title th:text="${title}"></title>
+<meta http-equiv="Content-Type" content="text/html; charset=UTF-8" />
+<link rel="stylesheet" media="screen" th:href="@{${bootstrapCss}}" />
+<link rel="stylesheet" media="screen" th:href="@{/css/default.css}" />
+<script th:src="@{${jqueryJs}}"></script>
+<script th:src="@{${bootstrapJs}}"></script>
+<script th:src="@{${cookieJs}}"></script>
+<script th:src="@{/js/class.js}"></script>
+<script th:src="@{/js/forms.js}"></script>
+</head>
+<body>
+	<!-- navigation bar -->
+	<div th:replace="../fragments/navbar :: navbar"></div>
+
+	<!-- content -->
+	<div id="sharefile-container" class="first-level-container">
+		<br>
+		<div class="row">
+			<div class="col-sm-4"></div>
+			<div class="col-sm-4">
+				<form id="sharefile-form" onsubmit="return false;">
+					<div class="form-group">
+						<h3 th:text="|${file.title}: ${file.filename}|"></h3>
+						<p th:text="${file.description}"></p>
+					</div>
+					<div class="form-group dropdown">
+						<button class="btn btn-default dropdown-toggle" type="button"
+							id="shared_users" data-toggle="dropdown" aria-haspopup="true"
+							aria-expanded="true">
+							Shared Users <span class="caret"></span>
+						</button>
+						<ul class="dropdown-menu allow-focus" aria-labelledby="shared_users">
+							<li th:each="useraccess: ${userAccess}">
+								<label th:if="${file.userId != useraccess.first.id}">
+									<input type="checkbox" name="users[]" th:checked="${useraccess.second}" th:value="${useraccess.first.id}">
+									<span th:text="${useraccess.first.username}"></span>
+								</label>
+							</li>
+						</ul>
+					</div>
+					<input type="hidden" name="fileId" th:value="${file.id}">
+					<div class="form-group">
+						<button id="sharefile" class="btn btn-default btn-sm" onclick="return false;">Submit Changes</button>
+						<p class="help-block hidden">error block</p>
+					</div>
+				</form>
+			</div>
+			<div class="col-sm-4"></div>
+		</div>
+	</div>
+	
+	<!-- alert messages -->
+	<div th:replace="../fragments/alert_messages :: alert_messages"></div>
+</body>
+</html>

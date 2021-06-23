@@ -1,62 +1,117 @@
 /**
  * ShinyProxy-Visualizer
  * 
- * Copyright (C) 2021 MetaMorph
+ * Copyright 2021 MetaMorph
  * 
- * ===========================================================================
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
  * 
- * This program is free software: you can redistribute it and/or modify
- * it under the terms of the Apache License as published by
- * The Apache Software Foundation, either version 2 of the License, or
- * (at your option) any later version.
- * 
- * This program is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
- * Apache License for more details.
- * 
- * You should have received a copy of the Apache License
- * along with this program.  If not, see <http://www.apache.org/licenses/>
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *       
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
  */
 package com.metamorphsoftware.shinyproxy.controllers;
 
-import java.util.HashMap;
-import java.util.Map;
-import java.util.regex.Matcher;
-import java.util.regex.Pattern;
+import java.util.TreeMap;
 
 import javax.inject.Inject;
-import javax.servlet.http.HttpServletRequest;
 
 import org.springframework.core.env.Environment;
 
+import com.metamorphsoftware.shinyproxy.services.FileHandlingService;
 import com.metamorphsoftware.shinyproxy.services.SQLService;
+import com.metamorphsoftware.shinyproxy.services.SQLUserService;
 
 import eu.openanalytics.containerproxy.service.ProxyService;
+import eu.openanalytics.containerproxy.service.UserService;
 
+/**
+ * @author Fraser LeFevre
+ *
+ */
 public class BaseController extends eu.openanalytics.shinyproxy.controllers.BaseController {
 
 	@Inject
 	ProxyService proxyService;
 	
 	@Inject
+	Environment environment;
+	
+	@Inject
 	SQLService sqlService;
 	
 	@Inject
-	Environment environment;
+	SQLUserService sqlUserService;
 	
-	private static Pattern deletePattern = Pattern.compile(".*?/delete[^/]*/(?<uuid>[^/]*)/?$");
+	@Inject
+	FileHandlingService fileHandlingService;
 	
-	protected String getDeleteUUID(HttpServletRequest request) {
-		Matcher matcher = deletePattern.matcher(request.getRequestURI());
-		String uuid = matcher.matches() ? matcher.group("uuid") : null;
-		return uuid;
-	}
+	@Inject
+	UserService userService;
 	
-	protected Map<String, String> simpleMessageResponse(boolean error, String sucessMessage, String errorMessage) {
-		Map<String, String> response = new HashMap<>(); 
-		if (error) response.put("error", errorMessage);
-		else response.put("message", sucessMessage);
-		return response;
+	/**
+	 * @author Fraser LeFevre
+	 *
+	 */
+	public static class MessageResponse extends TreeMap<String, String> {
+		private static final long serialVersionUID = 6375452769798045370L;
+
+		private final static String ERROR_KEY = "error";
+		
+		private final static String SUCCESS_KEY = "message";
+		private final static String SUCCESS_MESSAGE = "success!";
+		
+		/**
+		 * 
+		 */
+		public MessageResponse() {
+			this(false, MessageResponse.SUCCESS_MESSAGE, null);
+		}
+		
+		/**
+		 * @param error
+		 * @param successMessage
+		 * @param errorMessage
+		 */
+		public MessageResponse(boolean error, String successMessage, String errorMessage) {
+			super();
+			if (error) this.put(MessageResponse.ERROR_KEY, errorMessage);
+			else this.put(MessageResponse.SUCCESS_KEY, successMessage);
+		}
+		
+		/**
+		 * @param error
+		 * @param errorMessage
+		 */
+		public MessageResponse(boolean error, String errorMessage) {
+			this(error, MessageResponse.SUCCESS_MESSAGE, errorMessage);
+		}
+		
+		/**
+		 * @param errorMessage
+		 */
+		public MessageResponse(String errorMessage) {
+			this(true, errorMessage);
+		}
+		
+		/**
+		 * @return
+		 */
+		public static MessageResponse success() {
+			return new MessageResponse();
+		}
+		
+		/**
+		 * @param errorMessage
+		 * @return
+		 */
+		public static MessageResponse error(String errorMessage) {
+			return new MessageResponse(errorMessage);
+		}
 	}
 }

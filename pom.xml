@@ -92,9 +92,20 @@
 			<artifactId>js-cookie</artifactId>
 			<version>2.2.1</version>
 		</dependency>
+
+		<!-- MetaMorph Additional Dependencies -->
+		<dependency>
+			<groupId>org.springframework.boot</groupId>
+			<artifactId>spring-boot-starter-validation</artifactId>
+		</dependency>
 		<dependency>
 			<groupId>org.apache.commons</groupId>
 			<artifactId>commons-dbcp2</artifactId>
+		</dependency>
+		<dependency>
+			<groupId>commons-fileupload</groupId>
+			<artifactId>commons-fileupload</artifactId>
+			<version>1.2.2</version>
 		</dependency>
 	</dependencies>
 
@@ -307,8 +318,9 @@
 						<exclude>src/deb/**</exclude>
 						<exclude>templates/**</exclude>
 						<exclude>src/main/resources/static/js/js.cookie-2.2.1.min.js</exclude>
-						
-						<!-- Exclude Files From Original ShinyProxy as they have their own appropriate license headers  -->
+
+						<!-- Exclude Files From Original ShinyProxy as they have their own 
+							appropriate license headers -->
 						<exclude>Jenkinsfile</exclude>
 						<exclude>kubernetesPod.yaml</exclude>
 						<exclude>SHINYPROXY_LICENSE</exclude>

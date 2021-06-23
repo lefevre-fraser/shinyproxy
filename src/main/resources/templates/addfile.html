@@ -1,0 +1,71 @@
+<!--
+
+    ShinyProxy-Visualizer
+    
+    Copyright 2021 MetaMorph
+    
+    Licensed under the Apache License, Version 2.0 (the "License");
+    you may not use this file except in compliance with the License.
+    You may obtain a copy of the License at
+    
+        http://www.apache.org/licenses/LICENSE-2.0
+          
+    Unless required by applicable law or agreed to in writing, software
+    distributed under the License is distributed on an "AS IS" BASIS,
+    WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+    See the License for the specific language governing permissions and
+    limitations under the License.
+
+-->
+<!DOCTYPE html>
+<html xmlns:th="http://www.thymeleaf.org"
+	xmlns:sec="http://www.thymeleaf.org/thymeleaf-extras-springsecurity4">
+<head lang="en">
+<title th:text="${title}"></title>
+<meta http-equiv="Content-Type" content="text/html; charset=UTF-8" />
+<link rel="stylesheet" media="screen" th:href="@{${bootstrapCss}}" />
+<link rel="stylesheet" media="screen" th:href="@{/css/default.css}" />
+<script th:src="@{${jqueryJs}}"></script>
+<script th:src="@{${bootstrapJs}}"></script>
+<script th:src="@{${cookieJs}}"></script>
+<script th:src="@{/js/forms.js}"></script>
+</head>
+<body>
+	<!-- navigation bar -->
+	<div th:replace="../fragments/navbar :: navbar"></div>
+
+	<!-- content -->
+	<div id="addfile-container" class="first-level-container">
+		<br>
+		<div class="row">
+			<div class="col-sm-4"></div>
+			<div class="col-sm-4">
+				<form id="addfile-form" onsubmit="return false;">
+					<div class="form-group">
+						<label class="control-label" for="title">Title</label> 
+						<input id="title" name="title" type="text" class="form-control" required="required">
+					</div>
+					<div class="form-group">
+						<label class="control-label" for="zipfile">Zip Folder</label> 
+						<input id="zipfile" name="zipfile" accept="application/zip" class="form-control" type="file" required="required">
+					</div>
+					<div class="form-group">
+						<label class="control-label" for="description">Description</label>
+						<textarea id="description" name="description" class="form-control" rows="2" cols="40"></textarea>
+					</div>
+
+					<div class="form-group">
+						<button id="addfile" type="button" class="btn btn-default btn-sm"
+							onclick="return false;">Add File</button>
+						<p class="help-block hidden">error block</p>
+					</div>
+				</form>
+			</div>
+			<div class="col-sm-4"></div>
+		</div>
+	</div>
+
+	<!-- alert messages -->
+	<div th:replace="../fragments/alert_messages :: alert_messages"></div>
+</body>
+</html>

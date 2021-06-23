@@ -15,14 +15,28 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package eu.openanalytics.shinyproxy.controllers;
+package com.metamorphsoftware.shinyproxy.datatypes;
 
-import org.springframework.boot.context.properties.ConfigurationPropertiesScan;
-import org.springframework.context.annotation.ComponentScan;
-import org.springframework.stereotype.Controller;
+public class Pair<F, S> {
+	private F first;
+	private S Second;
+	
+	public Pair(F first, S second) {
+		this.first = first;
+		this.Second = second;
+	}
 
-@ComponentScan("com.metamorphsoftware")
-@Controller
-public class ComponentScanController {
+	/**
+	 * @return the first
+	 */
+	public F getFirst() {
+		return first;
+	}
 
+	/**
+	 * @return the second
+	 */
+	public S getSecond() {
+		return Second;
+	}
 }

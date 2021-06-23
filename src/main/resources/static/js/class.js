@@ -1,4 +1,4 @@
-/**
+/*
  * ShinyProxy-Visualizer
  * 
  * Copyright 2021 MetaMorph
@@ -15,14 +15,6 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package eu.openanalytics.shinyproxy.controllers;
-
-import org.springframework.boot.context.properties.ConfigurationPropertiesScan;
-import org.springframework.context.annotation.ComponentScan;
-import org.springframework.stereotype.Controller;
-
-@ComponentScan("com.metamorphsoftware")
-@Controller
-public class ComponentScanController {
-
-}
+ $(document).ready(function() {
+	$(".dropdown-menu.allow-focus").on("click", function(e) { e.stopPropagation(); })
+ });
