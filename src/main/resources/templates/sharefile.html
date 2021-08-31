@@ -61,6 +61,10 @@
 							</li>
 						</ul>
 					</div>
+					<div class="form-group">
+						<label for="allowAnonymous">Allow Anonymous Access</label>
+						<input id="allowAnonymous" name="allowAnonymous" type="checkbox" th:checked="${file.hasAnonymousAccess()}">
+					</div>
 					<input type="hidden" name="fileId" th:value="${file.id}">
 					<div class="form-group">
 						<button id="sharefile" class="btn btn-default btn-sm" onclick="return false;">Submit Changes</button>

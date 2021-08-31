@@ -61,6 +61,7 @@ function onFail(formGroup) {
 }
 
 document.addEventListener('DOMContentLoaded', function() {
+	// Add File Submit
 	let addfileContainer = document.querySelector('#addfile-container')
 	if (addfileContainer) {
 		addfileContainer.querySelector("#addfile").addEventListener("click", function() {
@@ -92,6 +93,7 @@ document.addEventListener('DOMContentLoaded', function() {
 		})
 	}
 
+	// Share File Submit
 	let sharefileContainer = document.querySelector('#sharefile-container')
 	if (sharefileContainer) {
 		sharefileContainer.querySelector("#sharefile").addEventListener("click", function() {
@@ -124,6 +126,7 @@ document.addEventListener('DOMContentLoaded', function() {
 		})
 	}
 
+	// Set Links like: sharefile
 	let appList = document.querySelector('#applist')
 	if (appList) {
 		$("button[data-href]").on("click", function() {

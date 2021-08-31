@@ -17,6 +17,8 @@
  */
 package com.metamorphsoftware.shinyproxy.controllers;
 
+import java.util.UUID;
+
 import javax.servlet.http.HttpServletRequest;
 
 import org.springframework.stereotype.Controller;
@@ -36,9 +38,9 @@ public class SQLAdminController extends BaseController {
 	@RequestMapping(value="/admin/deleteuser/{userId}", method=RequestMethod.DELETE)
 	@ResponseBody
 	protected MessageResponse deleteUser(@PathVariable("userId") String userId, HttpServletRequest request) {
-		User user = sqlService.new User(userId);
+		User user = User.fromId(UUID.fromString(userId));// sqlService.new User(userId);
 
-		return new MessageResponse(!user.deleteById(), 
+		return new MessageResponse(!user.delete(), 
 				String.format("Failed to delete user: %s", user.getUsername()));
 	}
 }

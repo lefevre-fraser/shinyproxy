@@ -17,21 +17,24 @@
  */
 package com.metamorphsoftware.shinyproxy.services;
 
-import java.sql.Connection;
-import java.sql.PreparedStatement;
-import java.sql.ResultSet;
 import java.sql.SQLException;
-import java.util.ArrayList;
 import java.util.List;
 import java.util.UUID;
 
 import javax.inject.Inject;
 
+import org.springframework.security.authentication.AnonymousAuthenticationToken;
 import org.springframework.stereotype.Service;
 
 import com.metamorphsoftware.shinyproxy.services.SQLService.File;
+import com.metamorphsoftware.shinyproxy.services.SQLService.FilePermission;
+import com.metamorphsoftware.shinyproxy.services.SQLService.Record;
+import com.metamorphsoftware.shinyproxy.services.SQLService.Record.DBWhereClause.DBWhereClauseBuilder;
+import com.metamorphsoftware.shinyproxy.services.SQLService.Record.DBWhereComparator;
+import com.metamorphsoftware.shinyproxy.services.SQLService.Record.DBWhereLinker;
+import com.metamorphsoftware.shinyproxy.services.SQLService.Record.RecordNotFoundException;
 import com.metamorphsoftware.shinyproxy.services.SQLService.User;
-import com.metamorphsoftware.shinyproxy.services.SQLService.UserFileAccess;
+import com.metamorphsoftware.shinyproxy.services.SQLService.UserFilePermission;
 
 import eu.openanalytics.containerproxy.service.UserService;
 
@@ -49,13 +52,15 @@ public class SQLUserService {
 	
 	/**
 	 * @return
+	 * @throws RecordNotFoundException 
 	 */
 	public String getUserID() {
-		return getUser().getId();
+		return getUser().getId().toString();
 	}
 	
 	/**
 	 * @return
+	 * @throws RecordNotFoundException 
 	 */
 	public User getUser() {
 		return getUser(userService.getCurrentUserId());
@@ -64,13 +69,16 @@ public class SQLUserService {
 	/**
 	 * @param username
 	 * @return
+	 * @throws RecordNotFoundException 
 	 */
 	private User getUser(String username) {
-		User user = sqlService.new User();
+//		User user = sqlService.new User();
+		User user = new User();
 		user.setUsername(username);
-		user.getFromUsername();
-		if (user.getId() == null) {
-			user.save();
+		try {
+			user.getFromUsername();
+		} catch (RecordNotFoundException e) {
+			user.insert();
 		}
 		return user;
 	}
@@ -95,64 +103,74 @@ public class SQLUserService {
 	/**
 	 * @return
 	 */
-	public User[] getUserList() {
-		List<User> users = new ArrayList<User>();
-		
-		try (Connection conn = sqlService.getConnection()) {
-			PreparedStatement userIdStatement = conn.prepareStatement(
-					"SELECT * FROM users");
-			ResultSet userListResult = userIdStatement.executeQuery();
-			
-			while (userListResult.next()) { 
-				users.add(sqlService.new User(userListResult));
-			}
-			
-			conn.close();
-		} catch (SQLException e) {
-			throw new RuntimeException("Error retrieving user list", e);
-		}
-		
-		return users.toArray(User[]::new);
+	public List<User> getUserList() {
+		return Record.find(new User(), null);
 	}
 	
-	/**
-	 * @param ignoreAccessControl
-	 * @return
-	 */
-	public UserFileAccess[] getUserFileAccess(boolean ignoreAccessControl) {
-		return getUserFileAccess(getUserID(), ignoreAccessControl);
+//	/**
+//	 * @param ignoreAccessControl
+//	 * @return
+//	 */
+//	public UserFileAccess[] getUserFileAccess(boolean ignoreAccessControl) {
+//		return getUserFileAccess(getUserID(), userService.getCurrentAuth() instanceof AnonymousAuthenticationToken, ignoreAccessControl);
+//	}
+	
+	public List<UserFilePermission> getUserFileAccess(boolean ignoreAccessControl) {
+		return getUserFileAccess(getUser(), userService.getCurrentAuth() instanceof AnonymousAuthenticationToken, ignoreAccessControl);
 	}
 
 	/**
 	 * @param userId
+	 * @param anonymousAccess
 	 * @param ignoreAccessControl
 	 * @return
 	 */
-	private UserFileAccess[] getUserFileAccess(String userId, boolean ignoreAccessControl) {
-		List<UserFileAccess> ufaList = new ArrayList<UserFileAccess>();
-		
-		try (Connection conn = sqlService.getConnection()) {
-			PreparedStatement userFilesStatement = null;
-			if (ignoreAccessControl) {
-				userFilesStatement = conn.prepareStatement("SELECT * FROM file_access");
-			} else if (userId != null) {
-				userFilesStatement = conn.prepareStatement("SELECT * FROM user_file_access(?)");
-				userFilesStatement.setObject(1, UUID.fromString(userId));
-			}
-			
-			if (ignoreAccessControl || userId != null) {
-				ResultSet ufaResult = userFilesStatement.executeQuery();
-				while (ufaResult.next()) {
-					ufaList.add(sqlService.new UserFileAccess(ufaResult));
-				}
-				ufaResult.close();
-			}
-			
-			conn.close();
-		} catch (SQLException e) {
-			throw new RuntimeException("Error retrieving user's file list", e);
+//	private UserFileAccess[] getUserFileAccess(String userId, boolean anonymousAccess, boolean ignoreAccessControl) {
+//		List<UserFileAccess> ufaList = new ArrayList<UserFileAccess>();
+//		
+//		try (Connection conn = sqlService.getConnection()) {
+//			PreparedStatement userFilesStatement = null;
+//			if (ignoreAccessControl) {
+//				userFilesStatement = conn.prepareStatement("SELECT * FROM file_access");
+//			} else {
+//				userFilesStatement = conn.prepareStatement("SELECT * FROM user_file_access(?)");
+//				if (anonymousAccess || userId == null) userFilesStatement.setNull(1, Types.OTHER);
+//				else userFilesStatement.setObject(1, UUID.fromString(userId));
+//			}
+//
+//			ResultSet ufaResult = userFilesStatement.executeQuery();
+//			while (ufaResult.next()) {
+//				ufaList.add(sqlService.new UserFileAccess(ufaResult));
+//			}
+//			ufaResult.close();
+//			
+//			conn.close();
+//		} catch (SQLException e) {
+//			throw new RuntimeException("Error retrieving user's file list", e);
+//		}
+//		
+//		return ufaList.toArray(UserFileAccess[]::new);
+//	}
+	
+	private List<UserFilePermission> getUserFileAccess(User user, boolean anonymousAccess, boolean ignoreAccessControl) {
+		UserFilePermission ufp = new UserFilePermission();
+		if (ignoreAccessControl) {
+			return UserFilePermission.<UserFilePermission>find(ufp, null);
 		}
 		
-		return ufaList.toArray(UserFileAccess[]::new);
+		if (anonymousAccess) {
+			return UserFilePermission.<UserFilePermission>find(ufp, DBWhereClauseBuilder.Builder().withRecord(ufp).withWhereList()
+					.addWhere().withColumn("user_id").withComparator(DBWhereComparator.IS).withValue(null).addToWhereList()
+					.linker(DBWhereLinker.AND)
+					.addWhere().withColumn("file_permission_id").withValue(FilePermission.fromTitle("ANONYMOUS").getId()).addToWhereList()
+					.addListToClause().build());
+		}
+		
+		return UserFilePermission.<UserFilePermission>find(ufp, DBWhereClauseBuilder.Builder().withRecord(ufp).withWhereList()
+				.addWhere().withColumn("user_id").withValue(user.<UUID>getFieldValue("id")).addToWhereList()
+				.addListToClause().build());
+//			return ufp.find( 
+//					Record.createDBWhereClause(null, 
+//							List.of(Record.createDBWhere(ufp, "id", DBWhereComparator.EQ, user.<UUID>getFieldValue("id"))))).toArray(UserFilePermission[]::new);
 	}
 }

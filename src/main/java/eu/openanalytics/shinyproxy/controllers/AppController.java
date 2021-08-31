@@ -103,7 +103,7 @@ public class AppController extends BaseController {
 			ProxySpec spec = proxyService.getProxySpec(specId);
 			if (spec == null) throw new IllegalArgumentException("Unknown proxy spec: " + specId);
 			ProxySpec resolvedSpec = proxyService.resolveProxySpec(spec, null, null);
-			proxy = proxyService.startProxy(resolvedSpec, false);
+			proxy = proxyService.startProxy(resolvedSpec, true);
 		}
 		return proxy;
 	}

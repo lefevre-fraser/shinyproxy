@@ -27,6 +27,7 @@ import javax.servlet.http.HttpServletRequest;
 import javax.servlet.http.HttpServletResponse;
 
 import org.apache.commons.io.FilenameUtils;
+import org.springframework.security.authentication.AnonymousAuthenticationToken;
 import org.springframework.stereotype.Controller;
 import org.springframework.ui.ModelMap;
 import org.springframework.util.Assert;
@@ -38,14 +39,17 @@ import org.springframework.web.bind.annotation.RequestMethod;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.ResponseBody;
 import org.springframework.web.multipart.MultipartFile;
+import org.springframework.web.servlet.mvc.support.RedirectAttributes;
+import org.springframework.web.servlet.view.RedirectView;
 import org.thymeleaf.spring5.SpringTemplateEngine;
 
 import com.metamorphsoftware.shinyproxy.datatypes.Pair;
 import com.metamorphsoftware.shinyproxy.services.SQLService.File;
-import com.metamorphsoftware.shinyproxy.services.SQLService.FileUserAccess;
-import com.metamorphsoftware.shinyproxy.services.SQLService.SharedFile;
+//import com.metamorphsoftware.shinyproxy.services.SQLService.FileUserAccess;
+//import com.metamorphsoftware.shinyproxy.services.SQLService.SharedFile;
 import com.metamorphsoftware.shinyproxy.services.SQLService.User;
-import com.metamorphsoftware.shinyproxy.services.SQLService.UserFileAccess;
+//import com.metamorphsoftware.shinyproxy.services.SQLService.UserFileAccess;
+import com.metamorphsoftware.shinyproxy.services.SQLService.UserFilePermission;
 
 import eu.openanalytics.containerproxy.model.runtime.Proxy;
 
@@ -73,7 +77,7 @@ public class SQLController extends BaseController {
 	protected Object edit(ModelMap map, HttpServletRequest request) {
 		prepareMap(map, request);
 		
-		UserFileAccess ufa[] = sqlUserService.getUserFileAccess(false);
+		List<UserFilePermission> ufa = sqlUserService.getUserFileAccess(false);
 		map.put("apps", ufa);
 		
 		map.put("userId", sqlUserService.getUserID());
@@ -97,16 +101,16 @@ public class SQLController extends BaseController {
 		File file = sqlService.new File(sqlUserService.getUserID(), filename, title, description);
 			
 		try {
-			if (file.save()) {
-				if (fileHandlingService.store(zipfile, file.getId())) {
-					if (fileHandlingService.copyArchiveData(file.getId(), filename, sqlUserService.getUserID())) {
+			if (file.insert()) {
+				if (fileHandlingService.store(zipfile, file.getId().toString())) {
+					if (fileHandlingService.copyArchiveData(file.getId().toString(), filename, sqlUserService.getUserID())) {
 						return new MessageResponse();
 					} else throw new Exception("Error extracting archive data for user");
 				} else throw new Exception("Error uploading zip file for user");
 			} else throw new Exception("Error adding file to database");
 		} catch (Exception e) {
 			e.printStackTrace();
-			file.deleteById();
+			file.delete();
 		}
 		
 		return new MessageResponse(String.format("Failed to add file: %s", filename));
@@ -142,8 +146,12 @@ public class SQLController extends BaseController {
 	@ResponseBody
 	@PostMapping(value="/sharefile")
 	protected MessageResponse shareFilePOST(@RequestParam("fileId") String fileId, 
-			@RequestParam(name="users[]", required=false) String users[], HttpServletRequest request) {
+			@RequestParam(name="users[]", required=false) String users[],
+			@RequestParam(name="allowAnonymous", required=false) Boolean allowAnonymous, HttpServletRequest request) {
 		File file = sqlService.new File(fileId);
+		file.setAnonymousAccess(allowAnonymous);
+		file.update();
+		
 		List<String> errorMessages = new ArrayList<String>();
 		
 		if (users == null) users = new String[0];
@@ -161,12 +169,11 @@ public class SQLController extends BaseController {
 					errorMessages.add(String.format("Error removing access from user: %s. User has active proxy using this file", user.getUsername()));
 				} else {
 					SharedFile sharedFile = sqlService.new SharedFile(id, fileId);
-					if (sharedFile.getByKey()) {
-						if (!sharedFile.deleteById()) {
-							errorMessages.add(String.format("Error removing access from user: %s", user.getUsername()));
-						} else if (!fileHandlingService.delete(fileId, id)) {
+					if (sharedFile.get()) {
+						if (!fileHandlingService.delete(fileId, id)) {
 							errorMessages.add(String.format("Error deleting data from user: %s", user.getUsername()));
-							sharedFile.save();
+						} else if (!sharedFile.delete()) {
+							errorMessages.add(String.format("Error removing access from user: %s", user.getUsername()));
 						}
 					}
 				}
@@ -178,12 +185,27 @@ public class SQLController extends BaseController {
 			if (!currentShareList.contains(id)) {
 				User user = sqlService.new User(id);
 				SharedFile sharedFile = sqlService.new SharedFile(id, fileId);
-				if (!sharedFile.save()) {
+				if (!sharedFile.insert()) {
 					errorMessages.add(String.format("Error shareing access with user: %s", user.getUsername()));
 				} else if (!fileHandlingService.copyArchiveData(fileId, file.getFilename(), id)) {
 					errorMessages.add(String.format("Error shareing access with user: %s", user.getUsername()));
-					sharedFile.deleteById();
+					sharedFile.delete();
 				}
+			}
+		}
+		
+		// share with anonymous users
+		if (file.hasAnonymousAccess()) {
+			if (!fileHandlingService.copyArchiveData(fileId, file.getFilename(), "anonymous")) {
+				errorMessages.add("Error sharing file anonymously");
+				file.setAnonymousAccess(false);
+				file.update();
+			}
+		} else {
+			if (!fileHandlingService.delete(fileId, "anonymous")) {
+				errorMessages.add("Error removing anonymous access");
+				file.setAnonymousAccess(true);
+				file.update();
 			}
 		}
 
@@ -193,6 +215,45 @@ public class SQLController extends BaseController {
 		}
 		
 		return new MessageResponse();
+	}
+	
+	@GetMapping(value="/linkshare/{fileId}")
+	protected Object linkShare(@PathVariable("fileId") String fileId, ModelMap map, HttpServletRequest request, RedirectAttributes redirectAttributes) {
+		File file = sqlService.new File(fileId);
+		List<String> errorMessages = new ArrayList<String>();
+		
+		if (userService.getCurrentAuth() instanceof AnonymousAuthenticationToken) {
+			// Nothing to do, shared files will be used by all anonymous users.
+		} else {
+			User user = sqlUserService.getUser();
+			SharedFile sharedFile = sqlService.new SharedFile(user.getId(), fileId);
+			if (!sharedFile.insert()) {
+				errorMessages.add(String.format("Error shareing access with user: %s", user.getUsername()));
+			} else if (!fileHandlingService.copyArchiveData(fileId, file.getFilename(), user.getId())) {
+				errorMessages.add(String.format("Error shareing access with user: %s", user.getUsername()));
+				sharedFile.delete();
+			}
+		}
+		
+		if (!errorMessages.isEmpty()) {
+			redirectAttributes.addAttribute("error_messages", errorMessages);
+			return new RedirectView("/errormessagelist");
+		}
+			
+		return new RedirectView("/app/" + fileId);
+	}
+	
+	@ResponseBody
+	@GetMapping(value="/errormessagelist")
+	protected MessageResponse errorMessageList(RedirectAttributes redirectAttributes) {
+		@SuppressWarnings("unchecked")
+		List<String> errorMessages = (List<String>) redirectAttributes.getAttribute("error_messages");
+				
+		if (!errorMessages.isEmpty()) {
+			return MessageResponse.error(String.join("\n", errorMessages));
+		}
+		
+		return MessageResponse.error("Unknown cause");
 	}
 	
 	@ResponseBody
@@ -211,7 +272,7 @@ public class SQLController extends BaseController {
 		fileHandlingService.delete(fileId, fua.getFile().getFilename(), fua.getUserIds());
 		
 		File file = sqlService.new File(fileId);
-		if (sqlUserService.isFileOwner(file) && file.deleteById()) {
+		if (sqlUserService.isFileOwner(file) && file.delete()) {
 			deletedFile = file;
 		}
 		
@@ -228,8 +289,8 @@ public class SQLController extends BaseController {
 		
 		if (fileHandlingService.delete(fileId, sqlUserService.getUserID())) {
 			SharedFile sharedFile = sqlService.new SharedFile(sqlUserService.getUserID(), fileId);
-			if (sharedFile.getByKey()) {
-				if (!sharedFile.deleteById()) {
+			if (sharedFile.get()) {
+				if (!sharedFile.delete()) {
 					return new MessageResponse(
 							String.format("Error removing shared file: %s-%s from database", file.getTitle(), file.getFilename()));
 				}

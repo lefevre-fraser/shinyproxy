@@ -22,6 +22,7 @@ import java.util.AbstractMap;
 import java.util.Arrays;
 import java.util.List;
 import java.util.Map;
+import java.util.UUID;
 import java.util.function.Function;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
@@ -32,7 +33,10 @@ import org.springframework.context.annotation.Primary;
 import org.springframework.stereotype.Component;
 
 import com.metamorphsoftware.shinyproxy.services.FileHandlingService;
-import com.metamorphsoftware.shinyproxy.services.SQLService.UserFileAccess;
+import com.metamorphsoftware.shinyproxy.services.SQLService.File;
+import com.metamorphsoftware.shinyproxy.services.SQLService.Record.DBWhereComparator;
+import com.metamorphsoftware.shinyproxy.services.SQLService.Record.DBWhereClause.DBWhereClauseBuilder;
+import com.metamorphsoftware.shinyproxy.services.SQLService.UserFilePermission;
 import com.metamorphsoftware.shinyproxy.services.SQLUserService;
 
 import eu.openanalytics.containerproxy.model.spec.ContainerSpec;
@@ -59,32 +63,38 @@ public class SQLProxySpecProvider implements IProxySpecProvider {
 
 	@Override
 	public List<ProxySpec> getSpecs() {
-		return List.of(sqlUserService.getUserFileAccess(false))
-				.stream().map(new Function<UserFileAccess, ProxySpec>() {
+		return sqlUserService.getUserFileAccess(false)
+				.stream().map(new Function<UserFilePermission, ProxySpec>() {
 					@Override
-					public ProxySpec apply(UserFileAccess ufa) {
-						return createProxySpec(ufa);
+					public ProxySpec apply(UserFilePermission ufp) {
+						return createProxySpec(ufp);
 					}
 				})
 				.collect(Collectors.toList());
 	}
 	
 	/**
-	 * @param userFileAccess
+	 * @param UserFilePermission
 	 * @return
 	 */
-	private ProxySpec createProxySpec(UserFileAccess userFileAccess) {
+	private ProxySpec createProxySpec(UserFilePermission UserFilePermission) {
 		ProxySpec pSpec = new ProxySpec();
-		pSpec.setId(userFileAccess.getFileId());
-		pSpec.setDisplayName(userFileAccess.getFile().getTitle());
-		pSpec.setDescription(userFileAccess.getFile().getDescription());
+		pSpec.setId(UserFilePermission.getFieldValue("file_id"));
+		
+		File file = (File) new File().findOne(DBWhereClauseBuilder.Builder().withRecord(new File()).withWhereList()
+					.addWhere().withColumn("id").withValue(UUID.fromString(UserFilePermission.getFieldValue("file_id"))).addToWhereList()
+					.addListToClause().build());
+		
+		pSpec.setDisplayName(file.getTitle());
+		pSpec.setDescription(file.getDescription());
+		String userId = (UserFilePermission.getUserId() == null ? "anonymous" : UserFilePermission.getUserId());
 		
 		{
 			ContainerSpec cSpec = new ContainerSpec();
 			cSpec.setImage("visualizer");
-			Path dataPath = fileHandlingService.findJSONLaunch(userFileAccess.getFileId(), userFileAccess.getUserId());
+			Path dataPath = fileHandlingService.findJSONLaunch(UserFilePermission.getFileId(), userId);
 			if (dataPath == null) {
-				dataPath = fileHandlingService.findCSVLaunch(userFileAccess.getFileId(), userFileAccess.getUserId());
+				dataPath = fileHandlingService.findCSVLaunch(UserFilePermission.getFileId(), userId);
 			}
 			
 			cSpec.setVolumes(new String[] { String.format("%s:/home/visualizer/data", 
@@ -95,7 +105,7 @@ public class SQLProxySpecProvider implements IProxySpecProvider {
 			String filename = dataPath.getFileName().toString();
 			String launchFile = "/home/visualizer/data/" + 
 					(fileHandlingService.getConfig().getUserDockerVolume() == null ?
-							"" : (userFileAccess.getUserId() + "/" + userFileAccess.getFileId() + "/")) + filename;
+							"" : (userId + "/" + UserFilePermission.getFileId() + "/")) + filename;
 			String envVar = (filename.endsWith(".csv") ? "DIG_INPUT_CSV" : "DIG_DATASET_CONFIG"); 
 			cSpec.setEnv(Stream.of(
 					new AbstractMap.SimpleEntry<String, String>(envVar, launchFile))
