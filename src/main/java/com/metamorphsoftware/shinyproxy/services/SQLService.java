@@ -17,7 +17,6 @@
  */
 package com.metamorphsoftware.shinyproxy.services;
 
-import java.io.Serializable;
 import java.lang.reflect.Constructor;
 import java.lang.reflect.InvocationTargetException;
 import java.sql.Connection;
@@ -37,7 +36,9 @@ import java.util.Map.Entry;
 import java.util.TreeMap;
 import java.util.UUID;
 import java.util.stream.Collectors;
-import java.util.stream.Stream;
+
+import javax.annotation.PostConstruct;
+import javax.inject.Inject;
 
 import org.apache.commons.dbcp2.BasicDataSource;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -47,7 +48,6 @@ import org.springframework.stereotype.Service;
 import com.google.common.reflect.TypeToken;
 import com.metamorphsoftware.shinyproxy.configurationproperties.SQLConfigurationProperties;
 import com.metamorphsoftware.shinyproxy.services.SQLService.Record.DBWhere.DBWhereListBuilder;
-import com.metamorphsoftware.shinyproxy.services.SQLService.Record.DBWhereClause;
 import com.metamorphsoftware.shinyproxy.services.SQLService.Record.DBWhereClause.DBWhereClauseBuilder;
 
 /**
@@ -56,44 +56,66 @@ import com.metamorphsoftware.shinyproxy.services.SQLService.Record.DBWhereClause
  */
 @Service
 public class SQLService {
-	private static BasicDataSource pool;
-	private static SQLConfigurationProperties sqlProperties;
-	private static boolean initialized = false;
+	private BasicDataSource pool;
+	
+	@Inject
+	private SQLConfigurationProperties sqlProperties;
+	private boolean initialized = false;
+	
+	@PostConstruct
+	public void initialize() {
+		if (!this.initialized) {
+//			SQLService.sqlProperties = sqlProp;
+			
+			this.pool = new BasicDataSource();
+			this.pool.setUrl(this.sqlProperties.getUrl());
+			this.pool.setUsername(this.sqlProperties.getUsername());
+			this.pool.setPassword(this.sqlProperties.getPassword());
+			this.pool.setMaxTotal(this.sqlProperties.getMaxConnections());
+			this.pool.setMaxConnLifetimeMillis(this.sqlProperties.getMaxConnectionLifetimeMilliseconds());
+			this.pool.setMaxIdle(this.sqlProperties.getMaxIdleConnections());
+			this.pool.setMinIdle(this.sqlProperties.getMinIdleConnections());
+			
+			this.initialized = true;
+			
+			Record.sqlService = this;
+		}
+	}
 	
 	/**
 	 * @param sqlProp
 	 */
-	@Autowired
-	public static void initilizePool(SQLConfigurationProperties sqlProp) {
-		if (!SQLService.initialized) {
-			SQLService.sqlProperties = sqlProp;
-			
-			SQLService.pool = new BasicDataSource();
-			SQLService.pool.setUrl(SQLService.sqlProperties.getUrl());
-			SQLService.pool.setUsername(SQLService.sqlProperties.getUsername());
-			SQLService.pool.setPassword(SQLService.sqlProperties.getPassword());
-			SQLService.pool.setMaxTotal(SQLService.sqlProperties.getMaxConnections());
-			SQLService.pool.setMaxConnLifetimeMillis(SQLService.sqlProperties.getMaxConnectionLifetimeMilliseconds());
-			SQLService.pool.setMaxIdle(SQLService.sqlProperties.getMaxIdleConnections());
-			SQLService.pool.setMinIdle(SQLService.sqlProperties.getMinIdleConnections());
-			
-			SQLService.initialized = true;
-		}
-	}
+//	@Autowired
+//	public static void initilizePool(SQLConfigurationProperties sqlProp) {
+//		if (!SQLService.initialized) {
+//			SQLService.sqlProperties = sqlProp;
+//			
+//			SQLService.pool = new BasicDataSource();
+//			SQLService.pool.setUrl(SQLService.sqlProperties.getUrl());
+//			SQLService.pool.setUsername(SQLService.sqlProperties.getUsername());
+//			SQLService.pool.setPassword(SQLService.sqlProperties.getPassword());
+//			SQLService.pool.setMaxTotal(SQLService.sqlProperties.getMaxConnections());
+//			SQLService.pool.setMaxConnLifetimeMillis(SQLService.sqlProperties.getMaxConnectionLifetimeMilliseconds());
+//			SQLService.pool.setMaxIdle(SQLService.sqlProperties.getMaxIdleConnections());
+//			SQLService.pool.setMinIdle(SQLService.sqlProperties.getMinIdleConnections());
+//			
+//			SQLService.initialized = true;
+//		}
+//	}
 	
 	/**
 	 * @return
 	 */
 	public CommonsDbcp2DataSourcePoolMetadata getStats() {
-		return new CommonsDbcp2DataSourcePoolMetadata(SQLService.pool);
+		return new CommonsDbcp2DataSourcePoolMetadata(this.pool);
 	}
 	
 	/**
 	 * @return
 	 * @throws SQLException
 	 */
-	public static Connection getConnection() throws SQLException {
-		return SQLService.pool.getConnection();
+	public Connection getConnection() throws SQLException {
+		return this.pool.getConnection();
 	}
 	
 	/**
@@ -150,6 +172,7 @@ public class SQLService {
 	 *
 	 */
 	public static abstract class Record {
+		protected static SQLService sqlService;
 		
 		public static class RecordNotFoundException extends Exception {
 
@@ -179,6 +202,10 @@ public class SQLService {
 				super(cause);
 			}
 			
+		}
+		
+		public static class Token<T> {
+			public TypeToken<T> type = new TypeToken<T>(this.getClass()) {};
 		}
 		
 		/**
@@ -259,8 +286,7 @@ public class SQLService {
 				private String columnName;
 				private Object value;
 				private List<Object> values;
-//				private DBField field = null;
-//				private List<DBField> fields = null; // only used with IN Comparator
+
 				public static DBWhereBuilder Builder() {
 					return new DBWhereBuilder();
 				}
@@ -550,82 +576,10 @@ public class SQLService {
 			}
 		}
 		
-//		public static DBWhere createDBWhere(Record record, String fieldName, DBWhereComparator comparator, Object value) {
-//			DBWhereComparator dbWhereComparator = comparator;
-//			return new DBWhere() {{
-//				this.comparator = dbWhereComparator;
-//				this.field = record.fields.get(fieldName).copy();
-//				this.field.value = value;
-//			}};
-//		}
-//		
-//		public static DBWhere createDBWhere(Record record, String fieldName, List<Object> values) {
-//			return new DBWhere() {{
-//				this.comparator = DBWhereComparator.IN;
-//				this.fields = new ArrayList<DBField>();
-//				
-//				for (Object value: values) {
-//					DBField field = record.fields.get(fieldName).copy();
-//					field.value = value;
-//					this.fields.add(field);
-//				}
-//			}};
-//		}
-//		
-//		public static DBWhereClause createDBWhereClause(List<DBWhereLinker> linkers, List<DBWhere> wheres) {
-//			if ((wheres == null) || 
-//					(linkers == null && wheres.size() != 1) ||
-//					(linkers.size() != (wheres.size() - 1))) {
-//				throw new IllegalArgumentException("Size of linkers must be excatly one less than sizes of wheres");
-//			}
-//			
-//			List<DBWhereLinker> dbWhereLinkers = linkers;
-//			List<DBWhere> dbWheres = wheres;
-//			return new DBWhereClause() {{
-//				this.linkers = dbWhereLinkers;
-//				this.wheres = dbWheres;
-//			}};
-//		}
-//		
-//		public static DBWhereClause createDBWhereClauseFromClauses(List<DBWhereLinker> linkers, List<DBWhereClause> clauses) {
-//			if ((clauses == null) || 
-//					(linkers == null && clauses.size() != 1) ||
-//					(linkers.size() != (clauses.size() - 1))) {
-//				throw new IllegalArgumentException("Size of linkers must be excatly one less than sizes of wheres");
-//			}
-//			
-//			List<DBWhereLinker> dbWhereLinkers = linkers;
-//			List<DBWhereClause> dbClauses = clauses;
-//			return new DBWhereClause() {{
-//				this.linkers = dbWhereLinkers;
-//				this.clauses = dbClauses;
-//			}};
-//		}
-		
 		private String tablename;
 		public String tablename() {
 			return this.tablename;
 		}
-		
-//		protected Map<String, List<String>> keys = new TreeMap<String, List<String>>();
-//		
-//		protected  List<String> allKeys() {
-//			return this.keys.values().stream().flatMap(list -> list.stream()).collect(Collectors.toList());
-//		}
-//		
-//		protected void setKeyValuesToNull() {
-//			for (String key: this.allKeys()) {
-//				this.fields.get(key).value = null;
-//			}
-//		}
-//		
-//		protected void addKey(String id, List<String> key) {
-//			this.keys.put(id, key);
-//		}
-//		
-//		protected List<String> getKey(String id) {
-//			return this.keys.get(id);
-//		}
 
 		protected Map<String, DBField> fields = new TreeMap<String, DBField>();
 		
@@ -637,55 +591,9 @@ public class SQLService {
 			}
 		}
 		
-//		protected Record next = null;
-//		@SuppressWarnings("unchecked")
-//		public <T extends Record> List<T> getRecordList() {
-//			List<T> records = new ArrayList<T>();
-//			records.add((T) this);
-//			
-//			Record current = next;
-//			while (current != null) {
-//				records.add((T) current);
-//				current = current.next;
-//			}
-//			
-//			return Collections.unmodifiableList(records);
-//		}
-		
 		protected Record(String tablename) {
 			this.tablename = tablename;
 		}
-		
-//		/**
-//		 * 
-//		 */
-//		public Record() {
-//
-//		}
-//		
-//		protected Record(ResultSet recordResult) throws SQLException {
-//			this.fromResultSet(recordResult);
-//			
-//			Constructor<? extends Record> constructor;
-//			try {
-////				constructor = this.getClass().getDeclaredConstructor(ResultSet.class);
-//				constructor = this.getClass().getConstructor();
-//				Record curr = constructor.newInstance();
-//				do {
-//					
-//				} while (curr.fromResultSet(recordResult));
-//				this.next = constructor.newInstance();
-//				Record current = this.next;
-//				if (!this.next.fromResultSet(recordResult)) {
-//					
-//				}
-//				
-//				this.next = (recordResult.next() ? (Record) constructor.newInstance(recordResult) : null);
-//			} catch (NoSuchMethodException | SecurityException | InstantiationException | IllegalAccessException | IllegalArgumentException | InvocationTargetException e) {
-//				e.printStackTrace();
-//				throw new RuntimeException("Error creating new record types dynamically from SQL Results");
-//			}
-//		}
 		
 		@SuppressWarnings("unchecked")
 		public <T> T getFieldValue(String fieldName) {
@@ -695,37 +603,6 @@ public class SQLService {
 		protected <T> void setFieldValue(String fieldName, T value) {
 			this.fields.get(fieldName).value = value;
 		}
-
-//		/**
-//		 * @return the id
-//		 */
-//		public String getId() {
-//			DBField id = getFieldValue("id");
-//			return (id.value == null ? null : id.value.toString());
-//		}
-//		
-//		/**
-//		 * @param id the id to set
-//		 */
-//		protected void setId(UUID id) {
-//			setFieldValue("id", id);
-//		}
-//		
-//		/**
-//		 * @param id the id to set
-//		 */
-//		protected void setId(String id) {
-//			setId(id == null ? null : UUID.fromString(id));
-//		}
-		
-//		protected Map<String, DBField> getKeyFields(List<String> keynames) {
-//			return Record.getKeyFields(this.fields, keynames);
-//		}
-//		
-//		public static Map<String, DBField> getKeyFields(Map<String, DBField> fields, List<String> keynames) {
-//			if (keynames == null || keynames.isEmpty()) return Map.<String, DBField>of();
-//			return fields.entrySet().stream().filter(e -> keynames.contains(e.getKey())).collect(Collectors.toMap(Entry::getKey, Entry::getValue));
-//		}
 		
 		private static Collection<DBField> getKeyFields(DBWhere key) {
 			if (key.field != null) return List.of(key.field);
@@ -770,17 +647,6 @@ public class SQLService {
 			String format = "%s = ?,".repeat(fields.size()).replaceFirst(",$", "");
 			return String.format(format, fields.keySet().toArray());
 		}
-		
-//		public static String getWhereKeyFormat(Map<String, DBField> fields) {
-//			if (fields.isEmpty()) return "";
-//			
-//			String format = "";
-//			for (DBField field: fields.values()) {
-//				format += "%s" + String.format(" %s ? AND ", (field.value == null ? "IS" : "="));
-//			}
-//			format = format.replaceFirst(" AND $", "");
-//			return String.format(format, fields.keySet().toArray());
-//		}
 		
 		public static String getWhereKeyFormat(DBWhereClause clause) {
 			if ((clause.wheres == null || clause.wheres.isEmpty()) && (clause.clauses == null || clause.clauses.isEmpty())) return "";
@@ -848,7 +714,7 @@ public class SQLService {
 			Map<String, DBField> insertFields = record.fields.entrySet().stream().filter(e -> e.getValue().settings.insert).collect(Collectors.toMap(Entry::getKey, Entry::getValue));
 			if (insertFields.entrySet().stream().anyMatch(e -> e.getValue().settings.required && (e.getValue().value == null && e.getValue().defaultValue == null ))) return false;
 							
-			try (Connection conn = getConnection()) {
+			try (Connection conn = sqlService.getConnection()) {
 				PreparedStatement insertStatement = conn.prepareStatement(
 						String.format("INSERT INTO %s(%s) VALUES(%s) RETURNING *", record.tablename, Record.getInsertColumnFormat(insertFields), Record.getInsertValuesFormat(insertFields)));
 				
@@ -872,17 +738,14 @@ public class SQLService {
 		 * @return
 		 */
 		public static boolean updateByKey(Record record, DBWhereClause key) {
-//			Map<String, DBField> keyFields = Record.getKeyFields(record.fields, key);
-//			if (keyFields.isEmpty() || keyFields.values().stream().anyMatch(f -> f.value == null)) return false;
-			
 			Map<String, DBField> updateFields = record.fields.entrySet().stream().filter(e -> e.getValue().settings.update).collect(Collectors.toMap(Entry::getKey, Entry::getValue));
 			if (updateFields.entrySet().stream().anyMatch(e -> e.getValue().settings.required && (e.getValue().value == null && e.getValue().defaultValue == null))) return false;
 
-			try (Connection conn = getConnection()) {
+			try (Connection conn = sqlService.getConnection()) {
 				PreparedStatement insertStatement = conn.prepareStatement(
 						String.format("UPDATE %s SET %s %s RETURNING *", 
 								record.tablename, Record.getSetFormat(updateFields), 
-								(key.isEmpty() ? "" : String.format("WHERE %s", Record.getWhereKeyFormat(key)))));
+								((key == null || key.isEmpty()) ? "" : String.format("WHERE %s", Record.getWhereKeyFormat(key)))));
 				
 				Record.setQueryValuesFromFields(insertStatement, updateFields.values());
 				Record.setQueryValuesFromFields(insertStatement, Record.getKeyFields(key), updateFields.size());
@@ -905,10 +768,7 @@ public class SQLService {
 		 * @return
 		 */
 		public static boolean deleteByKey(Record record, DBWhereClause key) {
-//			Map<String, DBField> keyFields = record.getKeyFields(key);
-//			if (keyFields.isEmpty() || keyFields.values().stream().anyMatch(f -> f.value == null)) return false;
-			
-			try (Connection conn = getConnection()) {
+			try (Connection conn = sqlService.getConnection()) {
 				PreparedStatement deleteRecordStatement = conn.prepareStatement(
 						String.format("DELETE FROM %s WHERE %s RETURNING *", record.tablename, Record.getWhereKeyFormat(key)));
 				
@@ -958,12 +818,12 @@ public class SQLService {
 			};
 		}
 		
-		public Record findOne(DBWhereClause key) {
-			return Record.findOne(this, key);
+		public <T extends Record> T findOne(DBWhereClause key) {
+			return Record.<T>findOne((T) this, key);
 		}
 		
-		public List<Record> find(DBWhereClause key) {
-			return Record.find(this, key);
+		public <T extends Record> List<T> find(DBWhereClause key) {
+			return Record.<T>find((T) this, key);
 		}
 		
 		/**
@@ -976,8 +836,8 @@ public class SQLService {
 		 * @throws SQLException 
 		 */
 		public static <T extends Record> T findOne(T record, DBWhereClause key) {
-			List<T> records = Record.find(record, key);
-			return ((records.isEmpty() || records.size() > 1) ? null : records.get(0));
+			List<T> records = Record.<T>find(record, key);
+			return ((records == null || records.isEmpty() || records.size() > 1) ? null : records.get(0));
 		}
 		
 		public static <T extends Record> List<T> find(T record, DBWhereClause key) {
@@ -986,13 +846,20 @@ public class SQLService {
 			}
 			List<T> records = new ArrayList<T>();
 			
-			try(Connection conn = getConnection()) {
-				ResultSet findResult = Record.getResultsFromFields(conn, record.tablename(), Record.getKeyFields(key));
+			try(Connection conn = sqlService.getConnection()) {
+				ResultSet findResult = Record.getResultsFromKey(conn, record.tablename(), key);
 
 				boolean recorded;
-				TypeToken<T> type = new TypeToken<T>() {};
+//				TypeToken<T> type = new Token<T>().type;
 				do {
-					T rec = ((type.getType().getClass() == Record.class) ? (T) type.getRawType().getConstructor().newInstance() : (T) Record.createGenericRecord(record.tablename(), record.fields));
+					T rec;
+					if (record.getClass().getCanonicalName() == Record.class.getCanonicalName()) {
+						rec = (T) Record.createGenericRecord(record.tablename(), record.fields);
+					} else {
+						Constructor<T> con = (Constructor<T>) record.getClass().getDeclaredConstructor();
+						con.setAccessible(true);
+						rec = (T) con.newInstance();
+					}
 					recorded = rec.fromResultSet(findResult);
 					
 					if (recorded) records.add((T) rec);
@@ -1012,28 +879,22 @@ public class SQLService {
 		 * @return
 		 * @throws RecordNotFoundException 
 		 */
-		protected boolean getRecordByKey(DBWhereClause key) throws RecordNotFoundException {
-//			Map<String, DBField> keyFields = this.getKeyFields(key);
-//			if (keyFields.isEmpty()) return false;
-
-			//				ResultSet recordResult = Record.getResultsFromFields(conn, this.tablename, keyFields.values());
-			//
-			//				this.fromResultSet(recordResult);
-			//				
-			//				recordResult.close();
-			//				conn.close();
-			Record record = this.findOne(key);
+		protected <T extends Record> boolean getRecordByKey(DBWhereClause key) throws RecordNotFoundException {
+			T record = this.<T>findOne(key);
 			if (record == null) throw new RecordNotFoundException(key.toString());
+
+			this.tablename = record.tablename();
+			this.fields = record.fields;
 			
 			return true;
 		}
 		
-		public static ResultSet getResultsFromFields(Connection conn, String tablename, Collection<DBField> fields) throws SQLException {
+		public static ResultSet getResultsFromKey(Connection conn, String tablename, DBWhereClause key) throws SQLException {
 			PreparedStatement getRecordStatement = conn.prepareStatement(
 					String.format("SELECT * FROM %s%s", tablename, 
-							(fields.isEmpty() ? "" : String.format(" WHERE %s", fields))));
+							((key == null || key.isEmpty()) ? "" : String.format(" WHERE %s", Record.getWhereKeyFormat(key)))));
 			
-			Record.setQueryValuesFromFields(getRecordStatement, fields);
+			Record.setQueryValuesFromFields(getRecordStatement, Record.getKeyFields(key));
 			
 			ResultSet recordResult = getRecordStatement.executeQuery();
 			return recordResult;
@@ -1134,7 +995,7 @@ public class SQLService {
 		public String toString() {
 			Map<String, String> keyValueMap = this.fields.entrySet()
 					.stream().collect(Collectors.toMap(
-							e -> e.getKey(), e -> e.getValue().value.toString()));
+							e -> e.getKey(), e -> (e.getValue().value == null ? "null" : e.getValue().value.toString())));
 			
 			return String.format("{ tablename: %s, values: %s }",
 					this.tablename(), keyValueMap.toString());
@@ -1205,13 +1066,13 @@ public class SQLService {
 			this.setFieldValue("id", id);
 		}
 		
-		public static <T extends RecordIdUUID> T fromId(UUID id) {
-			T record = RecordIdUUIDBuilder.<T>Builder().withId(id).build();
+		public static <T extends RecordIdUUID> T fromId(Class<T> clazz, UUID id) {
+			T record = RecordIdUUIDBuilder.<T>Builder().withId(id).build(clazz);
 			return RecordIdUUID.<T>findOne(record, record.getKey());
 		}
 		
 		public static class RecordIdUUIDBuilder<T extends RecordIdUUID> {
-			private UUID id;
+			protected UUID id;
 			
 			public static <T extends RecordIdUUID> RecordIdUUIDBuilder<T> Builder() {
 				return new RecordIdUUIDBuilder<T>();
@@ -1226,10 +1087,14 @@ public class SQLService {
 				return this;
 			}
 			
-			public T build() {
-				TypeToken<T> type = new TypeToken<T>() {};
+			public T build(Class<T> clazz) {
+//				TypeToken<T> type = (TypeToken<T>) new TypeToken<T>(getClass()) {}.resolveType(RecordIdUUIDBuilder.class.getTypeParameters()[0]);
 				try {
-					T record = (T) type.getRawType().getConstructor().newInstance();
+//					T record = (T) type.getRawType().getDeclaredConstructor().newInstance();
+					Constructor<T> con = clazz.getDeclaredConstructor();
+					con.setAccessible(true);
+					T record = con.newInstance();
+//					T record = new T();
 					record.setId(this.id);
 					return record;
 				} catch (InstantiationException | IllegalAccessException | IllegalArgumentException
@@ -1247,20 +1112,6 @@ public class SQLService {
 	 */
 	public static class File extends RecordIdUUID {
 		public final static String TABLENAME = "file";
-		
-//		@Override
-//		public DBWhereClause getKey() {
-//			return DBWhereClauseBuilder.Builder().withRecord(this).withWhereList()
-//					.addWhere().withColumn("id").withComparator(DBWhereComparator.EQ).withValue(this.getFieldValue("id")).addToWhereList()
-//					.addListToClause()
-//					.build();
-////			return Record.createDBWhereClause(null, 
-////					List.of(
-////							Record.createDBWhere(
-////									this, "id", 
-////									DBWhereComparator.EQ, 
-////									this.getFieldValue("id"))));
-//		}
 
 		@Override
 		public boolean insert() {
@@ -1278,7 +1129,6 @@ public class SQLService {
 		}
 		
 		{
-//			this.addIDField();
 			this.addFields(
 				new DBField() {{
 					name = "filename";
@@ -1312,7 +1162,6 @@ public class SQLService {
 						required = true;
 					}};
 				}});
-//			this.addKey("id", List.of("id"));
 		}
 		
 		/**
@@ -1322,10 +1171,6 @@ public class SQLService {
 			super(File.TABLENAME);
 		}
 		
-//		public File(ResultSet fileResult) throws SQLException {
-//			super(fileResult);
-//		}
-		
 		/**
 		 * @param id
 		 * @throws RecordNotFoundException 
@@ -1333,7 +1178,7 @@ public class SQLService {
 		public File(String id) throws RecordNotFoundException {
 			this();
 			this.setId(id);
-			this.getRecordByKey(this.getKey());
+			this.<File>getRecordByKey(this.getKey());
 		}
 		
 		/**
@@ -1348,13 +1193,6 @@ public class SQLService {
 			this.fields.get("filename").value = filename;
 			this.fields.get("title").value = title;
 			this.fields.get("description").value = description;
-		}
-		
-		/**
-		 * @return
-		 */
-		public String getUserId() {
-			return this.fields.get("user_id").value.toString();
 		}
 		
 		/**
@@ -1386,13 +1224,6 @@ public class SQLService {
 		}
 		
 		/**
-		 * @return
-		 */
-		public Boolean hasAnonymousAccess() {
-			return (Boolean) this.fields.get("anonymous_access").value;
-		}
-		
-		/**
 		 * @param title
 		 */
 		public void setTitle(String title) {
@@ -1406,11 +1237,39 @@ public class SQLService {
 			this.fields.get("description").value = description;
 		}
 		
-		/**
-		 * @return
-		 */
-		public void setAnonymousAccess(Boolean anonymousAccess) {
-			this.fields.get("anonymous_access").value = anonymousAccess;
+		public static class FileBuilder extends RecordIdUUIDBuilder<File> {
+			UUID id;
+			String filename;
+			String title;
+			String description;
+			
+			public static FileBuilder Builder() {
+				return new FileBuilder();
+			}
+			
+			public FileBuilder withFilename(String filename) {
+				this.filename = filename;
+				return this;
+			}
+			
+			public FileBuilder withTitle(String title) {
+				this.title = title;
+				return this;
+			}
+			
+			public FileBuilder withDescription(String description) {
+				this.description = description;
+				return this;
+			}
+			
+			public File build() {
+				return new File() {{
+					this.setFieldValue("id", id);
+					this.setFieldValue("filename", filename);
+					this.setFieldValue("title", title);
+					this.setFieldValue("description", description);
+				}};
+			}
 		}
 	}
 	
@@ -1450,6 +1309,10 @@ public class SQLService {
 			return this.<Long>getFieldValue("id");
 		}
 		
+		public String getTitle() {
+			return this.<String>getFieldValue("title");
+		}
+		
 		public static FilePermission fromID(Long id) {
 			FilePermission fp = new FilePermission();
 			return FilePermission.<FilePermission>findOne(fp, 
@@ -1478,17 +1341,6 @@ public class SQLService {
 					.addWhere().withColumn("user_id").withComparator(DBWhereComparator.EQ).withValue(this.getFieldValue("user_id")).addToWhereList()
 					.addListToClause()
 					.build();
-//			return Record.createDBWhereClause(
-//					List.of(DBWhereLinker.AND), 
-//					List.of(
-//							Record.createDBWhere(
-//									this, "file_id", 
-//									DBWhereComparator.EQ, 
-//									this.getFieldValue("file_id")),
-//							Record.createDBWhere(
-//									this, "user_id", 
-//									DBWhereComparator.EQ, 
-//									this.getFieldValue("user_id"))));
 		}
 
 		@Override
@@ -1534,11 +1386,6 @@ public class SQLService {
 							update = true;
 						}};
 					}});
-//			this.addKey("primary_key", List.of("file_id", "user_id"));
-//			
-//			// Multi-Record Keys
-//			this.addKey("file_id", List.of("file_id"));
-//			this.addKey("user_id", List.of("user_id"));
 		}
 		
 		public UserFilePermission() {
@@ -1552,16 +1399,16 @@ public class SQLService {
 			this.setFilePermissionId(file_permission_id);
 		}
 
-		public String getFileId() {
-			return this.fields.get("file_id").value.toString();
+		public UUID getFileId() {
+			return (UUID) this.fields.get("file_id").value;
 		}
 
 		private void setFileId(String fileId) {
 			this.fields.get("file_id").value = UUID.fromString(fileId);
 		}
 		
-		public String getUserId() {
-			return this.fields.get("user_id").value.toString();
+		public UUID getUserId() {
+			return (UUID) this.fields.get("user_id").value;
 		}
 
 		private void setUserId(String userId) {
@@ -1575,6 +1422,65 @@ public class SQLService {
 		public void setFilePermissionId(Long file_permission_id) {
 			this.fields.get("file_permission_id").value = file_permission_id;
 		}
+		
+		public static List<UserFilePermission> fromFileId(UUID id) {
+			UserFilePermission ufp = new UserFilePermission();
+			return ufp.<UserFilePermission>find(DBWhereClauseBuilder.Builder().withRecord(ufp).withWhereList()
+					.addWhere().withColumn("file_id").withValue(id).addToWhereList()
+					.addListToClause().build());
+		}
+		
+		public static UserFilePermission fromKey(UUID fileId, UUID userId) {
+			UserFilePermission userfp =  UserFilePermissionBuilder.Builder().withFileId(fileId).withUserId(userId).build();
+			try {
+				userfp.<User>getRecordByKey(userfp.getKey());
+			} catch (RecordNotFoundException e) {
+				return null;
+			}
+			return userfp;
+		}
+		
+		public static List<UserFilePermission> fromFileIdAndPermissionId(UUID fileId, Long permissionId) {
+			UserFilePermission userfp = new UserFilePermission();
+			return userfp.<UserFilePermission>find(DBWhereClauseBuilder.Builder().withRecord(userfp).withWhereList()
+					.addWhere().withColumn("file_id").withValue(fileId).addToWhereList()
+					.linker(DBWhereLinker.AND)
+					.addWhere().withColumn("file_permission_id").withValue(permissionId).addToWhereList()
+					.addListToClause().build());
+		}
+		
+		public static class UserFilePermissionBuilder {
+			private UUID userId;
+			private UUID fileId;
+			private Long filePermissionId;
+			
+			public static UserFilePermissionBuilder Builder() {
+				return new UserFilePermissionBuilder();
+			}
+			
+			public UserFilePermissionBuilder withUserId(UUID id) {
+				this.userId = id;
+				return this;
+			}
+			
+			public UserFilePermissionBuilder withFileId(UUID id) {
+				this.fileId = id;
+				return this;
+			}
+			
+			public UserFilePermissionBuilder withFilePermissionId(Long id) {
+				this.filePermissionId = id;
+				return this;
+			}
+			
+			public UserFilePermission build() {
+				return new UserFilePermission() {{
+					this.setFieldValue("file_id", fileId);
+					this.setFieldValue("user_id", userId);
+					this.setFieldValue("file_permission_id", filePermissionId);
+				}};
+			}
+		}
 	}
 	
 	/**
@@ -1584,31 +1490,11 @@ public class SQLService {
 	public static class User extends RecordIdUUID {
 		public final static String TABLENAME = "app_user";
 		
-//		@Override
-//		public DBWhereClause getKey() {
-//			return DBWhereClauseBuilder.Builder().withRecord(this).withWhereList()
-//					.addWhere().withColumn("id").withComparator(DBWhereComparator.EQ).withValue(this.getFieldValue("id")).addToWhereList()
-//					.addListToClause()
-//					.build();
-////			return Record.createDBWhereClause(null, 
-////					List.of(
-////							Record.createDBWhere(
-////									this, "id", 
-////									DBWhereComparator.EQ, 
-////									this.getFieldValue("id"))));
-//		}
-		
 		public DBWhereClause getUsernameKey() {
 			return DBWhereClauseBuilder.Builder().withRecord(this).withWhereList()
 					.addWhere().withColumn("username").withComparator(DBWhereComparator.EQ).withValue(this.getFieldValue("username")).addToWhereList()
 					.addListToClause()
 					.build();
-//			return Record.createDBWhereClause(null, 
-//					List.of(
-//							Record.createDBWhere(
-//									this, "username", 
-//									DBWhereComparator.EQ, 
-//									this.getFieldValue("username"))));
 		}
 		
 		@Override
@@ -1628,7 +1514,6 @@ public class SQLService {
 
 
 		{
-//			this.addIDField();
 			this.addFields(
 					new DBField() {{
 						name = "username";
@@ -1652,8 +1537,6 @@ public class SQLService {
 							insert = true;
 						}};
 					}});
-//			this.addKey("id", List.of("id"));
-//			this.addKey("username", List.of("username"));
 		}
 		
 		/**
@@ -1672,7 +1555,7 @@ public class SQLService {
 			if (id == null) return;
 			
 			this.setId(id);
-			this.getRecordByKey(this.getKey());
+			this.<User>getRecordByKey(this.getKey());
 		}
 		
 		/**
@@ -1687,20 +1570,12 @@ public class SQLService {
 			this.fields.get("l_name").value = lName;
 		}
 		
-//		/**
-//		 * @param userResult
-//		 * @throws SQLException
-//		 */
-//		public User(ResultSet userResult) throws SQLException {
-//			super(userResult);
-//		}
-		
 		/**
 		 * @return
 		 * @throws RecordNotFoundException 
 		 */
 		public boolean getFromUsername() throws RecordNotFoundException {
-			return this.getRecordByKey(this.getUsernameKey());
+			return this.<User>getRecordByKey(this.getUsernameKey());
 		}
 
 		/**
@@ -1742,308 +1617,4 @@ public class SQLService {
 			}
 		}
 	}
-	
-//	/**
-//	 * @author Fraser LeFevre
-//	 *
-//	 */
-//	public class SharedFile extends Record {
-//		public final static String TABLENAME = "shared_files";
-//
-//		@Override
-//		protected String tablename() {
-//			return SharedFile.TABLENAME;
-//		}
-//
-//		@Override
-//		public boolean insert() {
-//			return Record.insert(this);
-//		}
-//
-//		@Override
-//		public boolean update() {
-//			return Record.updateByKey(this, this.getKey("id"));
-//		}
-//
-//		@Override
-//		public boolean delete() {
-//			return Record.deleteByKey(this, this.getKey("id"));
-//		}
-//		
-//		{
-//			this.addIDField();
-//			this.addFields(
-//					new DBField() {{
-//						name = "user_id";
-//						settings = new DBFieldSettings() {{
-//							type = Types.OTHER;
-//							objectCastType = UUID.class;
-//							required = true;
-//							insert = true;
-//						}};
-//					}},
-//					new DBField() {{
-//						name = "file_id";
-//						settings = new DBFieldSettings() {{
-//							type = Types.OTHER;
-//							objectCastType = UUID.class;
-//							required = true;
-//							insert = true;
-//						}};
-//					}});
-//			this.addKey("id", List.of("id):"));
-//			this.addKey("user_file", List.of("user_id", "file_id"));
-//		}
-//		
-//		/**
-//		 * 
-//		 */
-//		private SharedFile() { }
-//		
-//		/**
-//		 * @param id
-//		 */
-//		public SharedFile(String id) {
-//			this.setId(id);
-//			this.getRecordByKey(this.getKey("id"));
-//		}
-//		
-//		/**
-//		 * @param userId
-//		 * @param fileId
-//		 */
-//		public SharedFile(String userId, String fileId) {
-//			this.setUserId(userId);
-//			this.setFileId(fileId);
-//		}
-//		
-//		public SharedFile(ResultSet sharedFileResult) throws SQLException {
-//			super(sharedFileResult);
-//		}
-//
-//		/**
-//		 * @return
-//		 */
-//		public boolean get() {
-//			return this.getRecordByKey(this.getKey("user_file"));
-//		}
-//		
-//		/**
-//		 * @param fileId
-//		 */
-//		protected void setFileId(String fileId) {
-//			this.fields.get("file_id").value = UUID.fromString(fileId);
-//		}
-//		
-//		/**
-//		 * @return
-//		 */
-//		public String getFileId() {
-//			return this.fields.get("file_id").value.toString();
-//		}
-//
-//		/**
-//		 * @param userId
-//		 */
-//		protected void setUserId(String userId) {
-//			this.fields.get("user_id").value = UUID.fromString(userId);
-//		}
-//
-//		/**
-//		 * @return
-//		 */
-//		public String getUserId() {
-//			return this.fields.get("user_id").value.toString();
-//		}
-//	}
-	
-//	/**
-//	 * @author Fraser LeFevre
-//	 *
-//	 */
-//	public class UserFileAccess extends SharedFile {
-//		public final static String VIEWNAME = "file_access";
-//
-//		@Override
-//		protected String tablename() {
-//			return UserFileAccess.VIEWNAME;
-//		}
-//
-//		@Override
-//		public boolean delete() {
-//			throw new OperationNotPermitted("UserFileAccess is a view. DELETE is invalid");
-//		}
-//
-//		@Override
-//		public boolean update() {
-//			throw new OperationNotPermitted("UserFileAccess is a view. UPDATE is invalid");
-//		}
-//
-//		@Override
-//		public boolean insert() {
-//			throw new OperationNotPermitted("UserFileAccess is a view. INSERT is invalid");
-//		}
-//
-//		/**
-//		 * @return
-//		 */
-//		@Override
-//		public String getUserId() {
-//			UUID userId = (UUID) this.fields.get("user_id").value;
-//			return (userId == null ? null : userId.toString());
-//		}
-//		
-//		protected User owner;
-//		protected User user;
-//		protected File file;
-//		
-//		{
-//			this.addFields(
-//					new DBField() {{
-//						name = "owner_id";
-//						settings = new DBFieldSettings() {{
-//							type = Types.OTHER;
-//							objectCastType = UUID.class;
-//							required = true;
-//							insert = true;
-//						}};
-//					}});
-//			
-//			// remove fields from SharedFile parent class
-//			this.fields.remove("id");
-//			this.keys.remove("id");
-//		}
-//		
-//		/**
-//		 * @param ufaResult
-//		 * @throws SQLException
-//		 */
-//		public UserFileAccess(ResultSet ufaResult) throws SQLException {
-//			super(ufaResult);
-////			this.fromResultSet(ufaResult);
-//			this.owner = new User(this.getOwnerId());
-//			this.user = new User(this.getUserId());
-//			this.file = new File(this.getFileId());
-//			
-////			this.next = (ufaResult.next() ? new UserFileAccess(ufaResult) : null);
-//		}
-//
-//		/**
-//		 *
-//		 */
-//		@Override
-//		public String getId() {
-//			throw new OperationNotPermitted("UserFileAccess view has no id");
-//		}
-//
-//		/**
-//		 * @return
-//		 */
-//		public String getOwnerId() {
-//			return this.fields.get("owner_id").value.toString();
-//		}
-//
-//		/**
-//		 * @return the owner
-//		 */
-//		public User getOwner() {
-//			return owner;
-//		}
-//
-//		/**
-//		 * @return the user
-//		 */
-//		public User getUser() {
-//			return user;
-//		}
-//
-//		/**
-//		 * @return the file
-//		 */
-//		public File getFile() {
-//			return file;
-//		}
-//	}
-//	
-//	/**
-//	 * @author Fraser LeFevre
-//	 *
-//	 */
-//	public class FileUserAccess {
-//		protected File file = null;
-//		protected List<User> users = null;
-//		
-//		/**
-//		 * @param fileId
-//		 */
-//		public FileUserAccess(String fileId) {
-//			try (Connection conn = getConnection()) {
-//				PreparedStatement fuaStatement = conn.prepareStatement(
-//						"SELECT * FROM file_access WHERE file_id = ? AND user_id IS NOT NULL");
-//				fuaStatement.setObject(1, UUID.fromString(fileId), Types.OTHER);
-//				
-//				List<FileUserAccess> fuaList = new ArrayList<FileUserAccess>();
-//				ResultSet fuaResult = fuaStatement.executeQuery();
-//				
-//				while(fuaResult.next()) {
-//					fuaList.add(new FileUserAccess(fuaResult));
-//				}
-//				
-//				FileUserAccess fua = new FileUserAccess(fuaList);
-//				this.file = fua.file;
-//				this.users = fua.users;
-//			} catch (SQLException e) {
-//				e.printStackTrace();
-//			}
-//		}
-//		
-//		/**
-//		 * @param fuaResult
-//		 * @throws SQLException
-//		 */
-//		private FileUserAccess(ResultSet fuaResult) throws SQLException {
-//			if (fuaResult == null) throw new IllegalArgumentException("ResultSet must not be null");
-//			
-//			UserFileAccess ufa = new UserFileAccess(fuaResult);
-//			this.file = ufa.file;
-//			this.users = List.of(ufa.user);
-//		}
-//		
-//		/**
-//		 * @param fuas
-//		 */
-//		private FileUserAccess(List<FileUserAccess> fuas) {
-//			if (fuas == null || fuas.isEmpty()) return;
-//			this.file = fuas.get(0).file;
-//			this.users = fuas.get(0).users;
-//			this.merge(fuas.subList(1, fuas.size()));
-//		}
-//		
-//		/**
-//		 * @param fuas
-//		 */
-//		private void merge(List<FileUserAccess> fuas) {
-//			fuas = (fuas == null ? List.of() : fuas);
-//			if (fuas.stream().anyMatch(f -> !f.file.getId().equals(this.file.getId()))) throw new IllegalArgumentException("Unable to merge FileUserAccess objects with different file ids");
-//
-//			this.users = Stream.of(List.of(this), fuas)
-//					.flatMap(list -> list.stream())
-//					.map(fua -> fua.users).flatMap(users -> users.stream())
-//					.distinct().collect(Collectors.toList());
-//		}
-//
-//		/**
-//		 * @return the file
-//		 */
-//		public File getFile() {
-//			return file;
-//		}
-//
-//		/**
-//		 * @return the userIds
-//		 */
-//		public String[] getUserIds() {
-//			return this.users.stream().map(user -> user.getId()).toArray(String[]::new);
-//		}
-//	}
 }

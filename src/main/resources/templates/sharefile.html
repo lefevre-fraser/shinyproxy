@@ -54,8 +54,8 @@
 						</button>
 						<ul class="dropdown-menu allow-focus" aria-labelledby="shared_users">
 							<li th:each="useraccess: ${userAccess}">
-								<label th:if="${file.userId != useraccess.first.id}">
-									<input type="checkbox" name="users[]" th:checked="${useraccess.second}" th:value="${useraccess.first.id}">
+								<label th:if="${!ownerList.contains(useraccess.first.getId())}">
+									<input type="checkbox" name="users[]" th:checked="${useraccess.second}" th:value="${useraccess.first.getId()}">
 									<span th:text="${useraccess.first.username}"></span>
 								</label>
 							</li>
@@ -63,9 +63,9 @@
 					</div>
 					<div class="form-group">
 						<label for="allowAnonymous">Allow Anonymous Access</label>
-						<input id="allowAnonymous" name="allowAnonymous" type="checkbox" th:checked="${file.hasAnonymousAccess()}">
+						<input id="allowAnonymous" name="allowAnonymous" type="checkbox" th:checked="${anonymousAccess}">
 					</div>
-					<input type="hidden" name="fileId" th:value="${file.id}">
+					<input type="hidden" name="fileId" th:value="${file.getId()}">
 					<div class="form-group">
 						<button id="sharefile" class="btn btn-default btn-sm" onclick="return false;">Submit Changes</button>
 						<p class="help-block hidden">error block</p>

@@ -19,6 +19,7 @@ package com.metamorphsoftware.shinyproxy.controllers;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.UUID;
 import java.util.function.Function;
 import java.util.stream.Collectors;
 
@@ -44,12 +45,16 @@ import org.springframework.web.servlet.view.RedirectView;
 import org.thymeleaf.spring5.SpringTemplateEngine;
 
 import com.metamorphsoftware.shinyproxy.datatypes.Pair;
+import com.metamorphsoftware.shinyproxy.datatypes.Triple;
 import com.metamorphsoftware.shinyproxy.services.SQLService.File;
-//import com.metamorphsoftware.shinyproxy.services.SQLService.FileUserAccess;
-//import com.metamorphsoftware.shinyproxy.services.SQLService.SharedFile;
+import com.metamorphsoftware.shinyproxy.services.SQLService.File.FileBuilder;
+import com.metamorphsoftware.shinyproxy.services.SQLService.FilePermission;
+import com.metamorphsoftware.shinyproxy.services.SQLService.Record;
+import com.metamorphsoftware.shinyproxy.services.SQLService.Record.DBWhereClause.DBWhereClauseBuilder;
+import com.metamorphsoftware.shinyproxy.services.SQLService.Record.DBWhereLinker;
 import com.metamorphsoftware.shinyproxy.services.SQLService.User;
-//import com.metamorphsoftware.shinyproxy.services.SQLService.UserFileAccess;
 import com.metamorphsoftware.shinyproxy.services.SQLService.UserFilePermission;
+import com.metamorphsoftware.shinyproxy.services.SQLService.UserFilePermission.UserFilePermissionBuilder;
 
 import eu.openanalytics.containerproxy.model.runtime.Proxy;
 
@@ -77,10 +82,40 @@ public class SQLController extends BaseController {
 	protected Object edit(ModelMap map, HttpServletRequest request) {
 		prepareMap(map, request);
 		
-		List<UserFilePermission> ufa = sqlUserService.getUserFileAccess(false);
-		map.put("apps", ufa);
+		List<UserFilePermission> userfpList = sqlUserService.getUserFileAccess(false, false);
+		List<Triple<List<UUID>, UserFilePermission, File>> apps = userfpList.stream().map(userfp -> {
+			File file = File.fromId(File.class, userfp.getFileId());
+			List<UserFilePermission> userfpOwnerList = UserFilePermission.fromFileIdAndPermissionId(file.getId(), FilePermission.fromTitle("OWNER").getId());
+			List<User> userOwnerList = userfpOwnerList.stream().map(ufp -> User.fromId(User.class, ufp.getUserId())).collect(Collectors.toList());
+			List<UUID> uuidOwnerList = userOwnerList.stream().map(user -> user.getId()).collect(Collectors.toList());
+			return new Triple<List<UUID>, UserFilePermission, File>(uuidOwnerList, userfp, file);
+		}).collect(Collectors.toList());
 		
-		map.put("userId", sqlUserService.getUserID());
+		Long anonymousId = FilePermission.fromTitle("ANONYMOUS").getId();
+		Long linkshareId = FilePermission.fromTitle("LINK_SHARE").getId();
+		List<Boolean> sharelink = apps.stream().map(app -> app.second).map(userfp -> {
+			List<UserFilePermission> ufp = Record.<UserFilePermission>find(new UserFilePermission(), DBWhereClauseBuilder.Builder().withRecord(new UserFilePermission())
+					.withClauseList()
+						.addClause().withWhereList()
+							.addWhere().withColumn("file_id").withValue(userfp.getFileId()).addToWhereList()
+							.addListToClause().addClauseToList()
+						.linker(DBWhereLinker.AND)
+						.addClause().withWhereList()
+							.addWhere().withColumn("file_permission_id").withValue(FilePermission.fromTitle("ANONYMOUS").getId()).addToWhereList()
+							.linker(DBWhereLinker.OR)
+							.addWhere().withColumn("file_permission_id").withValue(FilePermission.fromTitle("LINK_SHARE").getId()).addToWhereList()
+						.addListToClause().addClauseToList()
+					.addListToClause().build());
+
+			if (!ufp.isEmpty()) {
+				return true;
+			}
+			return false;
+		}).collect(Collectors.toList());
+		
+		map.put("apps", apps);
+		map.put("displayShareLink", sharelink);
+		map.put("userId", sqlUserService.getUser().getId());
 		
 		return "index";
 	}
@@ -98,15 +133,26 @@ public class SQLController extends BaseController {
 		Assert.hasText(title, "No Title Provided");
 		
 		String filename = FilenameUtils.getName(zipfile.getOriginalFilename());
-		File file = sqlService.new File(sqlUserService.getUserID(), filename, title, description);
+		File file = FileBuilder.Builder()
+				.withFilename(filename)
+				.withTitle(title)
+				.withDescription(description)
+				.build();//sqlService.new File(sqlUserService.getUserID(), filename, title, description);
 			
 		try {
 			if (file.insert()) {
-				if (fileHandlingService.store(zipfile, file.getId().toString())) {
-					if (fileHandlingService.copyArchiveData(file.getId().toString(), filename, sqlUserService.getUserID())) {
-						return new MessageResponse();
-					} else throw new Exception("Error extracting archive data for user");
-				} else throw new Exception("Error uploading zip file for user");
+				UserFilePermission userfp = UserFilePermissionBuilder.Builder().withFileId(file.getId()).withUserId(sqlUserService.getUser().getId())
+						.withFilePermissionId(FilePermission.fromTitle("OWNER").getId()).build();
+				if (userfp.insert()) {
+					if (fileHandlingService.store(zipfile, file.getId().toString())) {
+						if (fileHandlingService.copyArchiveData(file.getId().toString(), filename, sqlUserService.getUserID())) {
+							return new MessageResponse();
+						} else throw new Exception("Error extracting archive data for user");
+					} else throw new Exception("Error uploading zip file for user");
+				} else {
+					file.delete();
+					throw new Exception("Error setting file owner permissions");
+				}
 			} else throw new Exception("Error adding file to database");
 		} catch (Exception e) {
 			e.printStackTrace();
@@ -119,18 +165,32 @@ public class SQLController extends BaseController {
 	@GetMapping(value="/sharefile/{fileId}")
 	protected Object shareFileGET(@PathVariable("fileId") String fileId,
 			ModelMap map, HttpServletRequest request, HttpServletResponse response) {
+		UUID fileUUID = UUID.fromString(fileId);
 		prepareMap(map, request);
 		
-		if (!sqlUserService.isFileOwner(sqlService.new File(fileId))) {
+		if (!sqlUserService.isFileOwner(File.fromId(File.class, fileUUID)/*sqlService.new File(fileId)*/)) {
 			throw new RuntimeException("Unauthorized to share this file");
 		}
 		
-		FileUserAccess fua = sqlService.new FileUserAccess(fileId); // sqlService.getFileUserAccess(fileId);
-		map.put("file", fua.getFile());
-		
-		List<String> usersWithAccess = List.of(fua.getUserIds());
+//		FileUserAccess fua = sqlService.new FileUserAccess(fileId); // sqlService.getFileUserAccess(fileId);
+		map.put("file", File.fromId(File.class, fileUUID));//fua.getFile());
+		List<UserFilePermission> ownerList = UserFilePermission.find(new UserFilePermission(), DBWhereClauseBuilder.Builder().withRecord(new UserFilePermission()).withWhereList()
+				.addWhere().withColumn("file_id").withValue(fileUUID).addToWhereList()
+				.linker(DBWhereLinker.AND)
+				.addWhere().withColumn("file_permission_id").withValue(FilePermission.fromTitle("OWNER").getId()).addToWhereList()
+				.addListToClause().build());
+		map.put("ownerList", (ownerList == null ? new ArrayList<UUID>() : ownerList.stream().map(userfp -> userfp.getUserId()).collect(Collectors.toList())));
+		UserFilePermission anonymousAccess = UserFilePermission.findOne(new UserFilePermission(), DBWhereClauseBuilder.Builder().withRecord(new UserFilePermission()).withWhereList()
+				.addWhere().withColumn("file_id").withValue(fileUUID).addToWhereList()
+				.linker(DBWhereLinker.AND)
+				.addWhere().withColumn("file_permission_id").withValue(FilePermission.fromTitle("ANONYMOUS").getId()).addToWhereList()
+				.addListToClause().build());
+		map.put("anonymousAccess", (anonymousAccess == null ? false : true));
+
+		List<UserFilePermission> ufpList = UserFilePermission.fromFileId(fileUUID);
+		List<UUID> usersWithAccess = ufpList.stream().map(ufp -> ufp.getUserId()).filter(id -> id != null).map(id -> id).collect(Collectors.toList());
 		@SuppressWarnings("unchecked")
-		Pair<User, Boolean> userAccess[] = List.of(sqlUserService.getUserList()).stream()
+		Pair<User, Boolean> userAccess[] = sqlUserService.getUserList().stream()
 				.map(new Function<User, Pair<User, Boolean>>() {
 					@Override
 					public Pair<User, Boolean> apply(User user) {
@@ -148,31 +208,59 @@ public class SQLController extends BaseController {
 	protected MessageResponse shareFilePOST(@RequestParam("fileId") String fileId, 
 			@RequestParam(name="users[]", required=false) String users[],
 			@RequestParam(name="allowAnonymous", required=false) Boolean allowAnonymous, HttpServletRequest request) {
-		File file = sqlService.new File(fileId);
-		file.setAnonymousAccess(allowAnonymous);
-		file.update();
+		UUID fileUUID = UUID.fromString(fileId);
+		File file = File.fromId(File.class, fileUUID);// sqlService.new File(fileId);
+//		file.setAnonymousAccess(allowAnonymous);
+//		file.update();
+		
+		sqlUserService.anonymousFileShare(file, allowAnonymous);
+		
+//		UserFilePermission anonymousAccess = UserFilePermission.findOne(new UserFilePermission(), DBWhereClauseBuilder.Builder().withRecord(new UserFilePermission()).withWhereList()
+//				.addWhere().withColumn("file_id").withValue(fileUUID).addToWhereList()
+//				.linker(DBWhereLinker.AND)
+//				.addWhere().withColumn("file_permission_id").withValue(FilePermission.fromTitle("ANONYMOUS").getId()).addToWhereList()
+//				.addListToClause().build());
+//		if (allowAnonymous) {
+//			if (anonymousAccess == null) {
+//				UserFilePermissionBuilder.Builder().withFileId(fileUUID)
+//					.withUserId(null).withFilePermissionId(FilePermission.fromTitle("ANONYMOUS").getId())
+//					.build().insert();
+//			}
+//		} else {
+//			anonymousAccess.delete();
+//		}
 		
 		List<String> errorMessages = new ArrayList<String>();
 		
 		if (users == null) users = new String[0];
 		
+		List<UserFilePermission> ownerList = new UserFilePermission().find(DBWhereClauseBuilder.Builder().withRecord(new UserFilePermission()).withWhereList()
+				.addWhere().withColumn("file_id").withValue(fileUUID).addToWhereList()
+				.linker(DBWhereLinker.AND)
+				.addWhere().withColumn("file_permission_id").withValue(FilePermission.fromTitle("OWNER").getId()).addToWhereList()
+				.addListToClause().build());
+		if (ownerList == null) ownerList = new ArrayList<UserFilePermission>();
+		List<UUID> ownerUUIDList = ownerList.stream().map(owner -> owner.getUserId()).collect(Collectors.toList());
+		
 		List<String> newShareList = List.of(users);
-		List<String> currentShareList = List.of(sqlService.new FileUserAccess(fileId).getUserIds())
-				.stream().filter(id -> !id.equals(file.getUserId())).collect(Collectors.toList());
+		List<String> currentShareList = UserFilePermission.fromFileId(fileUUID).stream().filter(ufp -> !ownerUUIDList.contains(ufp.getUserId())).map(ufp -> ufp.getUserId()).filter(id -> id != null).map(id -> id.toString()).collect(Collectors.toList());
+		//List.of(sqlService.new FileUserAccess(fileId).getUserIds())
+//				.stream().filter(id -> !id.equals(file.getUserId())).collect(Collectors.toList());
 		List<Proxy> activeFileProxies = proxyService.getProxies(proxy -> proxy.getId() == fileId, true);
 		
 		// Remove access from users not in the newShareList
 		for (String id: currentShareList) {
 			if (!newShareList.contains(id)) {
-				User user = sqlService.new User(id);
+				User user = User.fromId(User.class, UUID.fromString(id));//sqlService.new User(id);
 				if (activeFileProxies.stream().anyMatch(proxy -> proxy.getUserId() == user.getUsername())) {
 					errorMessages.add(String.format("Error removing access from user: %s. User has active proxy using this file", user.getUsername()));
 				} else {
-					SharedFile sharedFile = sqlService.new SharedFile(id, fileId);
-					if (sharedFile.get()) {
+//					SharedFile sharedFile = sqlService.new SharedFile(id, fileId);
+					UserFilePermission userfp = UserFilePermission.fromKey(fileUUID, UUID.fromString(id));
+					if (userfp != null) {
 						if (!fileHandlingService.delete(fileId, id)) {
 							errorMessages.add(String.format("Error deleting data from user: %s", user.getUsername()));
-						} else if (!sharedFile.delete()) {
+						} else if (!userfp.delete()) {
 							errorMessages.add(String.format("Error removing access from user: %s", user.getUsername()));
 						}
 					}
@@ -183,29 +271,33 @@ public class SQLController extends BaseController {
 		// Share with any users who don't have access
 		for (String id: newShareList) {
 			if (!currentShareList.contains(id)) {
-				User user = sqlService.new User(id);
-				SharedFile sharedFile = sqlService.new SharedFile(id, fileId);
-				if (!sharedFile.insert()) {
+				User user = User.fromId(User.class, UUID.fromString(id));//sqlService.new User(id);
+//				SharedFile sharedFile = sqlService.new SharedFile(id, fileId);
+				UserFilePermission userfp = UserFilePermissionBuilder.Builder().withFileId(fileUUID).withUserId(UUID.fromString(id))
+						.withFilePermissionId(FilePermission.fromTitle("VIEW").getId()).build();
+				if (!userfp.insert()) {
 					errorMessages.add(String.format("Error shareing access with user: %s", user.getUsername()));
 				} else if (!fileHandlingService.copyArchiveData(fileId, file.getFilename(), id)) {
 					errorMessages.add(String.format("Error shareing access with user: %s", user.getUsername()));
-					sharedFile.delete();
+					userfp.delete();
 				}
 			}
 		}
 		
 		// share with anonymous users
-		if (file.hasAnonymousAccess()) {
+		if (sqlUserService.hasAnonymousAccess(file)/*file.hasAnonymousAccess()*/) {
 			if (!fileHandlingService.copyArchiveData(fileId, file.getFilename(), "anonymous")) {
 				errorMessages.add("Error sharing file anonymously");
-				file.setAnonymousAccess(false);
-				file.update();
+				sqlUserService.anonymousFileShare(file, false);
+//				file.setAnonymousAccess(false);
+//				file.update();
 			}
 		} else {
 			if (!fileHandlingService.delete(fileId, "anonymous")) {
 				errorMessages.add("Error removing anonymous access");
-				file.setAnonymousAccess(true);
-				file.update();
+				sqlUserService.anonymousFileShare(file, true);
+//				file.setAnonymousAccess(true);
+//				file.update();
 			}
 		}
 
@@ -219,19 +311,21 @@ public class SQLController extends BaseController {
 	
 	@GetMapping(value="/linkshare/{fileId}")
 	protected Object linkShare(@PathVariable("fileId") String fileId, ModelMap map, HttpServletRequest request, RedirectAttributes redirectAttributes) {
-		File file = sqlService.new File(fileId);
+		File file = File.fromId(File.class, UUID.fromString(fileId));//sqlService.new File(fileId);
 		List<String> errorMessages = new ArrayList<String>();
 		
 		if (userService.getCurrentAuth() instanceof AnonymousAuthenticationToken) {
 			// Nothing to do, shared files will be used by all anonymous users.
 		} else {
 			User user = sqlUserService.getUser();
-			SharedFile sharedFile = sqlService.new SharedFile(user.getId(), fileId);
-			if (!sharedFile.insert()) {
+//			SharedFile sharedFile = sqlService.new SharedFile(user.getId(), fileId);
+			UserFilePermission userfp = UserFilePermissionBuilder.Builder().withFileId(UUID.fromString(fileId)).withUserId(user.getId())
+					.withFilePermissionId(FilePermission.fromTitle("VIEW").getId()).build();
+			if (!userfp.insert()) {
 				errorMessages.add(String.format("Error shareing access with user: %s", user.getUsername()));
-			} else if (!fileHandlingService.copyArchiveData(fileId, file.getFilename(), user.getId())) {
+			} else if (!fileHandlingService.copyArchiveData(fileId, file.getFilename(), user.getId().toString())) {
 				errorMessages.add(String.format("Error shareing access with user: %s", user.getUsername()));
-				sharedFile.delete();
+				userfp.delete();
 			}
 		}
 		
@@ -263,15 +357,17 @@ public class SQLController extends BaseController {
 		
 		List<Proxy> activeFileProxies = proxyService.getProxies(proxy -> proxy.getId() == fileId, true);
 		if (!activeFileProxies.isEmpty()) {
-			File file = sqlService.new File(fileId);
+			File file = File.fromId(File.class, UUID.fromString(fileId));//sqlService.new File(fileId);
 			return new MessageResponse(
 					String.format("Error deleting file: %s-%s\nActive Sessions are using this data", file.getTitle(), file.getFilename()));
 		}
 
-		FileUserAccess fua = sqlService.new FileUserAccess(fileId);// sqlService.getFileUserAccess(fileId);
-		fileHandlingService.delete(fileId, fua.getFile().getFilename(), fua.getUserIds());
+//		FileUserAccess fua = sqlService.new FileUserAccess(fileId);// sqlService.getFileUserAccess(fileId);
+		List<UserFilePermission> userfp = UserFilePermission.fromFileId(UUID.fromString(fileId));
+		fileHandlingService.delete(fileId, File.fromId(File.class, UUID.fromString(fileId)).getFilename(), 
+				userfp.stream().map(ufp -> ufp.getUserId()).filter(id -> id != null).map(id -> id.toString()).toArray(String[]::new));
 		
-		File file = sqlService.new File(fileId);
+		File file = File.fromId(File.class, UUID.fromString(fileId));// sqlService.new File(fileId);
 		if (sqlUserService.isFileOwner(file) && file.delete()) {
 			deletedFile = file;
 		}
@@ -283,14 +379,15 @@ public class SQLController extends BaseController {
 	@ResponseBody
 	@RequestMapping(value="/removefile/{fileId}", method=RequestMethod.DELETE)
 	protected MessageResponse removeFile(@PathVariable("fileId") String fileId, ModelMap map, HttpServletRequest request) {
-		File file = sqlService.new File(fileId);
+		File file = File.fromId(File.class, UUID.fromString(fileId));//sqlService.new File(fileId);
 		List<Proxy> activeFileProxies = proxyService.getProxies(proxy -> proxy.getId() == fileId, false);
 		if (!activeFileProxies.isEmpty()) return new MessageResponse("An active proxy is using the file. Cannot remove");
 		
 		if (fileHandlingService.delete(fileId, sqlUserService.getUserID())) {
-			SharedFile sharedFile = sqlService.new SharedFile(sqlUserService.getUserID(), fileId);
-			if (sharedFile.get()) {
-				if (!sharedFile.delete()) {
+//			SharedFile sharedFile = sqlService.new SharedFile(sqlUserService.getUserID(), fileId);
+			UserFilePermission userfp = UserFilePermission.fromKey(sqlUserService.getUser().getId(), UUID.fromString(fileId));
+			if (userfp != null) {
+				if (!userfp.delete()) {
 					return new MessageResponse(
 							String.format("Error removing shared file: %s-%s from database", file.getTitle(), file.getFilename()));
 				}

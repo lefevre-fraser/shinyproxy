@@ -34,7 +34,6 @@ import org.springframework.stereotype.Component;
 
 import com.metamorphsoftware.shinyproxy.services.FileHandlingService;
 import com.metamorphsoftware.shinyproxy.services.SQLService.File;
-import com.metamorphsoftware.shinyproxy.services.SQLService.Record.DBWhereComparator;
 import com.metamorphsoftware.shinyproxy.services.SQLService.Record.DBWhereClause.DBWhereClauseBuilder;
 import com.metamorphsoftware.shinyproxy.services.SQLService.UserFilePermission;
 import com.metamorphsoftware.shinyproxy.services.SQLUserService;
@@ -63,7 +62,8 @@ public class SQLProxySpecProvider implements IProxySpecProvider {
 
 	@Override
 	public List<ProxySpec> getSpecs() {
-		return sqlUserService.getUserFileAccess(false)
+		List<UserFilePermission> userfpList = sqlUserService.getUserFileAccess(false, true);
+		return (userfpList == null ? List.<UserFilePermission>of() : userfpList)
 				.stream().map(new Function<UserFilePermission, ProxySpec>() {
 					@Override
 					public ProxySpec apply(UserFilePermission ufp) {
@@ -79,22 +79,22 @@ public class SQLProxySpecProvider implements IProxySpecProvider {
 	 */
 	private ProxySpec createProxySpec(UserFilePermission UserFilePermission) {
 		ProxySpec pSpec = new ProxySpec();
-		pSpec.setId(UserFilePermission.getFieldValue("file_id"));
+		pSpec.setId(UserFilePermission.getFileId().toString());
 		
 		File file = (File) new File().findOne(DBWhereClauseBuilder.Builder().withRecord(new File()).withWhereList()
-					.addWhere().withColumn("id").withValue(UUID.fromString(UserFilePermission.getFieldValue("file_id"))).addToWhereList()
+					.addWhere().withColumn("id").withValue(UserFilePermission.getFileId()).addToWhereList()
 					.addListToClause().build());
 		
 		pSpec.setDisplayName(file.getTitle());
 		pSpec.setDescription(file.getDescription());
-		String userId = (UserFilePermission.getUserId() == null ? "anonymous" : UserFilePermission.getUserId());
+		String userId = (UserFilePermission.getUserId() == null ? "anonymous" : UserFilePermission.getUserId().toString());
 		
 		{
 			ContainerSpec cSpec = new ContainerSpec();
 			cSpec.setImage("visualizer");
-			Path dataPath = fileHandlingService.findJSONLaunch(UserFilePermission.getFileId(), userId);
+			Path dataPath = fileHandlingService.findJSONLaunch(UserFilePermission.getFileId().toString(), userId);
 			if (dataPath == null) {
-				dataPath = fileHandlingService.findCSVLaunch(UserFilePermission.getFileId(), userId);
+				dataPath = fileHandlingService.findCSVLaunch(UserFilePermission.getFileId().toString(), userId);
 			}
 			
 			cSpec.setVolumes(new String[] { String.format("%s:/home/visualizer/data", 

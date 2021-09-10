@@ -46,19 +46,21 @@
 	<div class="first-level-container">
 		<div id="applist">
 			<ul>
-				<li th:each="app: ${apps}">
+				<li th:each="app, iter: ${apps}">
 					<th:block th:if="${not #httpServletRequest.requestURI.startsWith('/edit')}" >
 						<a th:href="@{/app/}+${app.id}" th:text="${app.displayName == null} ? ${app.id} : ${app.displayName}"></a>
 						<br th:if="${app.description != null}" />
 						<span th:if="${app.description != null}" th:utext="${app.description}"></span>
 					</th:block>
 					<th:block th:if="${#httpServletRequest.requestURI.startsWith('/edit')}">
-						<span><b th:text="${app.file.title == null} ? ${app.file.filename} : ${app.file.title}"></b></span>
-						<br th:if="${app.file.description != null}" />
-						<span th:if="${app.file.description != null}" th:utext="${app.file.description}"></span>
-						<a th:if="${userId eq app.ownerId}" th:href="|/sharefile/${app.fileId}|" class="btn btn-default btn-sm">Share</a>
-						<button th:if="${userId eq app.ownerId}" th:data-href="|/deletefile/${app.fileId}|" data-href-method="delete" class="btn btn-default btn-sm">Delete</button>
-						<button th:if="${userId ne app.ownerId}" th:data-href="|/removefile/${app.fileId}|" data-href-method="delete" class="btn btn-default btn-sm">Remove</button>
+						<span><b th:text="${app.third.title == null} ? ${app.third.filename} : ${app.third.title}"></b></span>
+						<br th:if="${app.third.description != null}" />
+						<span th:if="${app.third.description != null}" th:utext="${app.third.description}"></span>
+						<a th:if="${app.first.contains(userId)}" th:href="|/sharefile/${app.third.getId()}|" class="btn btn-default btn-sm">Share</a>
+						<button th:if="${app.first.contains(userId)}" th:data-href="|/deletefile/${app.third.getId()}|" data-href-method="delete" class="btn btn-default btn-sm">Delete</button>
+						<button th:if="${!app.first.contains(userId)}" th:data-href="|/removefile/${app.third.getId()}|" data-href-method="delete" class="btn btn-default btn-sm">Remove</button>
+						<br th:if="${displayShareLink.get(iter.index)}" />
+						<a th:if="${displayShareLink.get(iter.index)}" th:text="|@{~/linkshare/}${app.third.getId()}|" th:href="|@{~/linkshare/}${app.third.getId()}|" ></a>
 					</th:block>
 				</li>
 			</ul>
