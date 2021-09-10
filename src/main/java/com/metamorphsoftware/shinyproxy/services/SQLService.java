@@ -1431,13 +1431,19 @@ public class SQLService {
 		}
 		
 		public static UserFilePermission fromKey(UUID fileId, UUID userId) {
-			UserFilePermission userfp =  UserFilePermissionBuilder.Builder().withFileId(fileId).withUserId(userId).build();
-			try {
-				userfp.<User>getRecordByKey(userfp.getKey());
-			} catch (RecordNotFoundException e) {
-				return null;
-			}
-			return userfp;
+//			UserFilePermission userfp =  UserFilePermissionBuilder.Builder().withFileId(fileId).withUserId(userId).build();
+//			try {
+//				userfp.<UserFilePermission>getRecordByKey(userfp.getKey());
+//			} catch (RecordNotFoundException e) {
+//				return null;
+//			}
+//			return userfp;
+			UserFilePermission userfp = new UserFilePermission();
+			return userfp.<UserFilePermission>findOne(DBWhereClauseBuilder.Builder().withRecord(userfp).withWhereList()
+					.addWhere().withColumn("file_id").withValue(fileId).addToWhereList()
+					.linker(DBWhereLinker.AND)
+					.addWhere().withColumn("user_id").withValue(userId).addToWhereList()
+					.addListToClause().build());
 		}
 		
 		public static List<UserFilePermission> fromFileIdAndPermissionId(UUID fileId, Long permissionId) {

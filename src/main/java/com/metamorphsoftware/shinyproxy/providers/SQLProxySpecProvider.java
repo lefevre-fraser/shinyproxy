@@ -34,6 +34,7 @@ import org.springframework.stereotype.Component;
 
 import com.metamorphsoftware.shinyproxy.services.FileHandlingService;
 import com.metamorphsoftware.shinyproxy.services.SQLService.File;
+import com.metamorphsoftware.shinyproxy.services.SQLService.FilePermission;
 import com.metamorphsoftware.shinyproxy.services.SQLService.Record.DBWhereClause.DBWhereClauseBuilder;
 import com.metamorphsoftware.shinyproxy.services.SQLService.UserFilePermission;
 import com.metamorphsoftware.shinyproxy.services.SQLUserService;
@@ -74,27 +75,27 @@ public class SQLProxySpecProvider implements IProxySpecProvider {
 	}
 	
 	/**
-	 * @param UserFilePermission
+	 * @param userfp
 	 * @return
 	 */
-	private ProxySpec createProxySpec(UserFilePermission UserFilePermission) {
+	private ProxySpec createProxySpec(UserFilePermission userfp) {
 		ProxySpec pSpec = new ProxySpec();
-		pSpec.setId(UserFilePermission.getFileId().toString());
+		pSpec.setId(userfp.getFileId().toString() + (userfp.getFilePermissionId().equals(FilePermission.fromTitle("ANONYMOUS").getId()) ? "-anonymous" : ""));
 		
 		File file = (File) new File().findOne(DBWhereClauseBuilder.Builder().withRecord(new File()).withWhereList()
-					.addWhere().withColumn("id").withValue(UserFilePermission.getFileId()).addToWhereList()
+					.addWhere().withColumn("id").withValue(userfp.getFileId()).addToWhereList()
 					.addListToClause().build());
 		
 		pSpec.setDisplayName(file.getTitle());
 		pSpec.setDescription(file.getDescription());
-		String userId = (UserFilePermission.getUserId() == null ? "anonymous" : UserFilePermission.getUserId().toString());
+		String userId = (userfp.getUserId() == null ? "anonymous" : userfp.getUserId().toString());
 		
 		{
 			ContainerSpec cSpec = new ContainerSpec();
 			cSpec.setImage("visualizer");
-			Path dataPath = fileHandlingService.findJSONLaunch(UserFilePermission.getFileId().toString(), userId);
+			Path dataPath = fileHandlingService.findJSONLaunch(userfp.getFileId().toString(), userId);
 			if (dataPath == null) {
-				dataPath = fileHandlingService.findCSVLaunch(UserFilePermission.getFileId().toString(), userId);
+				dataPath = fileHandlingService.findCSVLaunch(userfp.getFileId().toString(), userId);
 			}
 			
 			cSpec.setVolumes(new String[] { String.format("%s:/home/visualizer/data", 
@@ -105,7 +106,7 @@ public class SQLProxySpecProvider implements IProxySpecProvider {
 			String filename = dataPath.getFileName().toString();
 			String launchFile = "/home/visualizer/data/" + 
 					(fileHandlingService.getConfig().getUserDockerVolume() == null ?
-							"" : (userId + "/" + UserFilePermission.getFileId() + "/")) + filename;
+							"" : (userId + "/" + userfp.getFileId() + "/")) + filename;
 			String envVar = (filename.endsWith(".csv") ? "DIG_INPUT_CSV" : "DIG_DATASET_CONFIG"); 
 			cSpec.setEnv(Stream.of(
 					new AbstractMap.SimpleEntry<String, String>(envVar, launchFile))

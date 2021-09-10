@@ -83,13 +83,16 @@ public class SQLController extends BaseController {
 		prepareMap(map, request);
 		
 		List<UserFilePermission> userfpList = sqlUserService.getUserFileAccess(false, false);
-		List<Triple<List<UUID>, UserFilePermission, File>> apps = userfpList.stream().map(userfp -> {
-			File file = File.fromId(File.class, userfp.getFileId());
-			List<UserFilePermission> userfpOwnerList = UserFilePermission.fromFileIdAndPermissionId(file.getId(), FilePermission.fromTitle("OWNER").getId());
-			List<User> userOwnerList = userfpOwnerList.stream().map(ufp -> User.fromId(User.class, ufp.getUserId())).collect(Collectors.toList());
-			List<UUID> uuidOwnerList = userOwnerList.stream().map(user -> user.getId()).collect(Collectors.toList());
-			return new Triple<List<UUID>, UserFilePermission, File>(uuidOwnerList, userfp, file);
-		}).collect(Collectors.toList());
+		List<Triple<List<UUID>, UserFilePermission, File>> apps = userfpList.stream().map(new Function<UserFilePermission, Triple<List<UUID>, UserFilePermission, File>>() {
+
+			@Override
+			public Triple<List<UUID>, UserFilePermission, File> apply(UserFilePermission userfp) {
+				File file = File.fromId(File.class, userfp.getFileId());
+				List<UserFilePermission> userfpOwnerList = UserFilePermission.fromFileIdAndPermissionId(file.getId(), FilePermission.fromTitle("OWNER").getId());
+				List<User> userOwnerList = userfpOwnerList.stream().map(ufp -> User.fromId(User.class, ufp.getUserId())).collect(Collectors.toList());
+				List<UUID> uuidOwnerList = userOwnerList.stream().map(user -> user.getId()).collect(Collectors.toList());
+				return new Triple<List<UUID>, UserFilePermission, File>(uuidOwnerList, userfp, file);
+			}}).collect(Collectors.toList());
 		
 		Long anonymousId = FilePermission.fromTitle("ANONYMOUS").getId();
 		Long linkshareId = FilePermission.fromTitle("LINK_SHARE").getId();
@@ -313,8 +316,9 @@ public class SQLController extends BaseController {
 	protected Object linkShare(@PathVariable("fileId") String fileId, ModelMap map, HttpServletRequest request, RedirectAttributes redirectAttributes) {
 		File file = File.fromId(File.class, UUID.fromString(fileId));//sqlService.new File(fileId);
 		List<String> errorMessages = new ArrayList<String>();
+		Boolean anonymousAccess = userService.getCurrentAuth() instanceof AnonymousAuthenticationToken;
 		
-		if (userService.getCurrentAuth() instanceof AnonymousAuthenticationToken) {
+		if (anonymousAccess) {
 			// Nothing to do, shared files will be used by all anonymous users.
 		} else {
 			User user = sqlUserService.getUser();
@@ -334,7 +338,7 @@ public class SQLController extends BaseController {
 			return new RedirectView("/errormessagelist");
 		}
 			
-		return new RedirectView("/app/" + fileId);
+		return new RedirectView("/app/" + fileId + (anonymousAccess ? "-anonymous" : ""));
 	}
 	
 	@ResponseBody
@@ -380,12 +384,17 @@ public class SQLController extends BaseController {
 	@RequestMapping(value="/removefile/{fileId}", method=RequestMethod.DELETE)
 	protected MessageResponse removeFile(@PathVariable("fileId") String fileId, ModelMap map, HttpServletRequest request) {
 		File file = File.fromId(File.class, UUID.fromString(fileId));//sqlService.new File(fileId);
-		List<Proxy> activeFileProxies = proxyService.getProxies(proxy -> proxy.getId() == fileId, false);
+		List<Proxy> activeFileProxies = proxyService.getProxies(proxy -> proxy.getId().equals(fileId) || proxy.getId().equals(fileId + "-anonymous"), false);
+		for (Proxy prox: activeFileProxies) {
+			proxyService.stopProxy(prox, false, false);
+		}
+		
+		activeFileProxies = proxyService.getProxies(proxy -> proxy.getId().equals(fileId) || proxy.getId().equals(fileId + "-anonymous"), false);
 		if (!activeFileProxies.isEmpty()) return new MessageResponse("An active proxy is using the file. Cannot remove");
 		
 		if (fileHandlingService.delete(fileId, sqlUserService.getUserID())) {
 //			SharedFile sharedFile = sqlService.new SharedFile(sqlUserService.getUserID(), fileId);
-			UserFilePermission userfp = UserFilePermission.fromKey(sqlUserService.getUser().getId(), UUID.fromString(fileId));
+			UserFilePermission userfp = UserFilePermission.fromKey(UUID.fromString(fileId), sqlUserService.getUser().getId());
 			if (userfp != null) {
 				if (!userfp.delete()) {
 					return new MessageResponse(

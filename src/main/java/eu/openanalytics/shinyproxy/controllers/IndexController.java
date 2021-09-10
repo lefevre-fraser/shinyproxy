@@ -21,7 +21,9 @@
 package eu.openanalytics.shinyproxy.controllers;
 
 import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
+import java.util.stream.Collectors;
 
 import javax.servlet.http.HttpServletRequest;
 
@@ -43,6 +45,7 @@ public class IndexController extends BaseController {
 		prepareMap(map, request);
 		
 		ProxySpec[] apps = proxyService.getProxySpecs(null, false).toArray(new ProxySpec[0]);
+		apps = List.of(apps).stream().filter(app -> !app.getId().endsWith("-anonymous")).collect(Collectors.toList()).toArray(ProxySpec[]::new);
 		map.put("apps", apps);
 
 		return "index";
